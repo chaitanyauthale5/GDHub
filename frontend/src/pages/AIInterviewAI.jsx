@@ -1,26 +1,23 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { api } from '@/api/apiClient';
+import useVapi from '@/hooks/useVapi';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { api } from '@/api/apiClient';
 
-import { motion } from 'framer-motion';
-import { Bot, Mic, MicOff, Clock, ArrowLeft, Volume2, VolumeX, Send, LogOut } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { motion } from 'framer-motion';
+import { ArrowLeft, Bot, Clock, LogOut, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 
 export default function AIInterviewAI() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [aiMuted, setAiMuted] = useState(false);
-  const [conversation, setConversation] = useState([]);
-  const [currentTranscript, setCurrentTranscript] = useState('');
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [interviewStarted, setInterviewStarted] = useState(false);
-  const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
-  
+
   const [config, setConfig] = useState({
     interview_type: 'hr',
     company: '',
@@ -28,16 +25,13 @@ export default function AIInterviewAI() {
     duration: 15
   });
 
-  const recognitionRef = useRef(null);
-  const synthRef = useRef(null);
+  const { volumeLevel, isSessionActive, conversation, toggleCall, stopCall, resetConversation } = useVapi();
   const chatEndRef = useRef(null);
 
   useEffect(() => {
     loadUser();
-    initSpeech();
     return () => {
-      if (recognitionRef.current) recognitionRef.current.stop();
-      if (synthRef.current) window.speechSynthesis.cancel();
+      resetConversation();
     };
   }, []);
 
@@ -52,130 +46,39 @@ export default function AIInterviewAI() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversation]);
 
+  useEffect(() => {
+    setIsSpeaking(volumeLevel > 0.08);
+  }, [volumeLevel]);
+
   const loadUser = async () => {
     const currentUser = await api.auth.me();
     setUser(currentUser);
   };
 
-  const initSpeech = () => {
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      
-      recognitionRef.current.onresult = (event) => {
-        let transcript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
-        }
-        setCurrentTranscript(transcript);
-        
-        if (event.results[event.results.length - 1].isFinal) {
-          handleUserResponse(transcript);
-          setCurrentTranscript('');
-        }
-      };
-
-      recognitionRef.current.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        setIsListening(false);
-      };
-    }
-    synthRef.current = window.speechSynthesis;
-  };
-
-  const speak = (text) => {
-    if (aiMuted || !synthRef.current) return;
-    
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.9;
-    utterance.pitch = 1;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    synthRef.current.speak(utterance);
-  };
-
-  const toggleListening = () => {
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-    } else {
-      recognitionRef.current?.start();
-      setIsListening(true);
-    }
-  };
-
   const startInterview = async () => {
     setInterviewStarted(true);
+    setTimeElapsed(0);
     setLoading(true);
-    
-    const interviewContext = `You are an AI interviewer conducting a ${config.interview_type} interview${config.company ? ` for ${config.company}` : ''}${config.role ? ` for the role of ${config.role}` : ''}. 
-    Start with a warm greeting and ask the first interview question. Be professional but friendly. 
-    Keep responses conversational and under 100 words.`;
-
-    const response = await api.integrations.Core.InvokeLLM({
-      prompt: interviewContext,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          message: { type: "string" },
-          question: { type: "string" }
-        }
-      }
-    });
-
-    const aiMessage = response.message + " " + response.question;
-    setConversation([{ role: 'ai', content: aiMessage }]);
-    speak(aiMessage);
-    setLoading(false);
-  };
-
-  const handleUserResponse = async (userText) => {
-    if (!userText.trim()) return;
-    
-    setConversation(prev => [...prev, { role: 'user', content: userText }]);
-    setLoading(true);
-
-    const conversationHistory = conversation.map(m => `${m.role === 'ai' ? 'Interviewer' : 'Candidate'}: ${m.content}`).join('\n');
-    
-    const response = await api.integrations.Core.InvokeLLM({
-      prompt: `You are an AI interviewer conducting a ${config.interview_type} interview. 
-      
-Previous conversation:
-${conversationHistory}
-Candidate: ${userText}
-
-Based on the candidate's response, provide feedback if needed and ask the next relevant question. 
-Keep your response under 100 words and conversational.`,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          feedback: { type: "string" },
-          next_question: { type: "string" }
-        }
-      }
-    });
-
-    const aiMessage = (response.feedback ? response.feedback + " " : "") + response.next_question;
-    setConversation(prev => [...prev, { role: 'ai', content: aiMessage }]);
-    speak(aiMessage);
-    setLoading(false);
-  };
-
-  const handleTextSubmit = () => {
-    if (inputText.trim()) {
-      handleUserResponse(inputText);
-      setInputText('');
+    try {
+      await toggleCall();
+    } catch (e) {
+      console.error('Error starting Vapi interview:', e);
+    } finally {
+      setLoading(false);
     }
   };
 
   const endInterview = async () => {
-    window.speechSynthesis.cancel();
-    if (recognitionRef.current) recognitionRef.current.stop();
-    
-    // Generate analysis
+    // Stop the Vapi call if it's still active
+    if (isSessionActive) {
+      try {
+        await stopCall();
+      } catch (e) {
+        console.error('Error stopping Vapi interview:', e);
+      }
+    }
+
+    // Generate analysis from the transcripted conversation
     setLoading(true);
     const conversationText = conversation.map(m => `${m.role === 'ai' ? 'Interviewer' : 'Candidate'}: ${m.content}`).join('\n');
     
@@ -342,13 +245,6 @@ Provide a detailed analysis.`,
               </div>
             </motion.div>
           ))}
-          {currentTranscript && (
-            <div className="flex justify-end">
-              <div className="max-w-[80%] p-4 rounded-2xl bg-blue-400/50 text-white italic">
-                {currentTranscript}...
-              </div>
-            </div>
-          )}
           {loading && (
             <div className="flex justify-start">
               <div className="p-4 rounded-2xl bg-gray-700 text-white">
@@ -373,27 +269,11 @@ Provide a detailed analysis.`,
           </button>
 
           <button
-            onClick={toggleListening}
-            className={`p-6 rounded-full ${isListening ? 'bg-red-500 animate-pulse' : 'bg-green-500'} text-white shadow-xl`}
+            onClick={toggleCall}
+            className={`p-6 rounded-full ${isSessionActive ? 'bg-red-500 animate-pulse' : 'bg-green-500'} text-white shadow-xl`}
           >
-            {isListening ? <MicOff className="w-8 h-8" /> : <Mic className="w-8 h-8" />}
+            {isSessionActive ? <MicOff className="w-8 h-8" /> : <Mic className="w-8 h-8" />}
           </button>
-
-          <div className="flex-1 flex gap-2">
-            <Input
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleTextSubmit()}
-              placeholder="Or type your response..."
-              className="bg-gray-700 border-none text-white placeholder:text-gray-400"
-            />
-            <button
-              onClick={handleTextSubmit}
-              className="p-3 rounded-xl bg-blue-500 text-white"
-            >
-              <Send className="w-5 h-5" />
-            </button>
-          </div>
         </div>
       </div>
     </div>
