@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
-import { Trophy, Award, TrendingUp, Crown, UserPlus, Eye, Flame, Star, Zap } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
-import { createPageUrl } from '../utils';
+import { Award, Crown, Eye, Flame, Star, Trophy, UserPlus, Zap } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
+import { createPageUrl } from '../utils';
 
 export default function Leaderboard() {
   const navigate = useNavigate();

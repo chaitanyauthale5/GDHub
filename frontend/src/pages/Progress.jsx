@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { motion } from 'framer-motion';
-import { TrendingUp, MessageSquare, Mic, Bot, Flame, Award, Target, Calendar, Clock, BarChart3 } from 'lucide-react';
+import { Award, BarChart3, Bot, Calendar, Clock, Flame, MessageSquare, Mic, Target, TrendingUp } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
 
@@ -89,14 +89,15 @@ export default function Progress() {
         ? Math.round(extemporeScores.reduce((a, b) => a + b, 0) / extemporeScores.length)
         : 0;
 
-      setStats({
+      setStats(prev => ({
+        ...prev,
         totalGDSessions: userGDSessions.length + userGDRooms.length,
         totalExtemporeSessions: userExtemporeSessions.length,
         totalInterviews: userInterviews.length,
         avgExtemporeScore,
         thisWeekSessions,
         thisMonthSessions
-      });
+      }));
 
       // Recent activity
       const recent = allUserSessions

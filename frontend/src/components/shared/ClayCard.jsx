@@ -1,11 +1,10 @@
-import React from 'react';
 import { motion } from 'framer-motion';
 
 export default function ClayCard({ 
   children, 
   className = '', 
   hover = true,
-  onClick,
+  onClick = undefined,
   gradient = false,
   elevated = false 
 }) {
