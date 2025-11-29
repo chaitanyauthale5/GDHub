@@ -4,14 +4,15 @@ import { createPageUrl } from '../utils';
 import { api } from '@/api/apiClient';
 
 import { motion } from 'framer-motion';
-import { User, Flame, ArrowLeft, UserPlus, Check, MessageCircle } from 'lucide-react';
+import { User, Flame, ArrowLeft, UserPlus, Check, MessageCircle, Mail } from 'lucide-react';
+
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
 
 export default function UserProfile() {
   const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
-  const userId = urlParams.get('userId');
+  const userId = urlParams.get('userId') || urlParams.get('userid') || urlParams.get('email') || urlParams.get('id');
   
   const [currentUser, setCurrentUser] = useState(null);
   const [viewedUser, setViewedUser] = useState(null);
@@ -34,24 +35,31 @@ export default function UserProfile() {
       const allUsers = await api.entities.User.list();
       
       // Find target user - try multiple matching strategies
-      let targetUser = allUsers.find(u => u.id === userId);
-      if (!targetUser) {
-        targetUser = allUsers.find(u => u.email === userId);
-      }
-      
+      let targetUser = allUsers.find(u => u.id === userId) || allUsers.find(u => u.email === userId);
+
       // If still not found, the userId might be the profile's user_id
       if (!targetUser) {
-        // Get all profiles and find the one matching
         const allProfiles = await api.entities.UserProfile.list();
-
         const matchingProfile = allProfiles.find(p => p.user_id === userId);
         if (matchingProfile) {
-          targetUser = allUsers.find(u => u.email === matchingProfile.user_id || u.id === matchingProfile.user_id);
+          // use existing user if found, else build fallback from profile
+          targetUser =
+            allUsers.find(u => u.email === matchingProfile.user_id || u.id === matchingProfile.user_id) ||
+            {
+              id: matchingProfile.user_id,
+              email: matchingProfile.user_id,
+              full_name: matchingProfile.full_name || matchingProfile.name || (matchingProfile.user_id || '').split('@')[0]
+            };
           setProfile(matchingProfile);
         }
       }
-      
-      setViewedUser(targetUser);
+
+      // Final fallback: build minimal user from param
+      if (!targetUser && userId) {
+        targetUser = { id: userId, email: userId, full_name: (userId.includes('@') ? userId.split('@')[0] : String(userId)) };
+      }
+
+      setViewedUser(targetUser || null);
 
       if (targetUser) {
         // Get profile if not already found
@@ -141,7 +149,7 @@ export default function UserProfile() {
   if (!viewedUser) {
     return (
       <div className="min-h-screen pb-20">
-        <TopNav activePage="Leaderboard" />
+        <TopNav activePage="Leaderboard" user={null} />
         <div className="max-w-4xl mx-auto px-6 pt-28 text-center">
           <h1 className="text-2xl font-bold text-gray-700">User not found</h1>
           <button
@@ -157,7 +165,7 @@ export default function UserProfile() {
 
   return (
     <div className="min-h-screen pb-20">
-      <TopNav activePage="Leaderboard" />
+      <TopNav activePage="Leaderboard" user={profile} />
       
       <div className="max-w-4xl mx-auto px-6 pt-28">
         <button

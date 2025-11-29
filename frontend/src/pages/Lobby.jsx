@@ -33,6 +33,12 @@ export default function Lobby() {
       // Fetch room by ID directly
       const roomData = await api.entities.GDRoom.filter({ id: roomId });
 
+      if (roomData.length === 0) {
+        // Room was deleted by host
+        navigate(createPageUrl('Dashboard'));
+        return;
+      }
+
       if (roomData.length > 0) {
         const fetchedRoom = roomData[0];
         setRoom(fetchedRoom);
@@ -40,6 +46,9 @@ export default function Lobby() {
         // If room status changed to active, navigate to prepare/room
         if (fetchedRoom.status === 'active') {
           navigate(createPageUrl(`GDPrepare?roomId=${fetchedRoom.id}`));
+        } else if (fetchedRoom.status === 'completed') {
+          // Host ended the room; redirect everyone out
+          navigate(createPageUrl('Dashboard'));
         }
       }
     } catch (error) {
@@ -67,14 +76,24 @@ export default function Lobby() {
 
   const exitRoom = async () => {
     if (!room || !user) return;
-    
-    // Remove user from participants
-    const updatedParticipants = room.participants.filter(p => p.user_id !== user.email && p.user_id !== user.id);
-    await api.entities.GDRoom.update(room.id, {
-      participants: updatedParticipants
-    });
-    
-    navigate(createPageUrl('GDArena'));
+
+    try {
+      const hostId = room.host_id || room.created_by;
+      const amHost = hostId === user.email || hostId === user.id;
+
+      if (amHost) {
+        try {
+          await api.entities.GDRoom.delete(room.id);
+        } catch (e) {
+          await api.entities.GDRoom.update(room.id, { status: 'completed', participants: [] });
+        }
+      } else {
+        const updatedParticipants = (room.participants || []).filter(p => p.user_id !== user.email && p.user_id !== user.id);
+        await api.entities.GDRoom.update(room.id, { participants: updatedParticipants });
+      }
+    } finally {
+      navigate(createPageUrl('GDArena'));
+    }
   };
 
   // Check if current user is the host - the person who created the room

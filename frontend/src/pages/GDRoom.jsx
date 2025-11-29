@@ -55,6 +55,25 @@ export default function GDRoom() {
     };
   }, [room, user]);
 
+  useEffect(() => {
+    let timer;
+    const poll = async () => {
+      try {
+        const data = await api.entities.GDRoom.filter({ id: roomId });
+        if (data.length === 0 || data[0].status === 'completed') {
+          if (jitsiApiRef.current) {
+            jitsiApiRef.current.dispose();
+            jitsiApiRef.current = null;
+          }
+          navigate(createPageUrl('Dashboard'));
+        }
+      } catch {}
+    };
+    poll();
+    timer = setInterval(poll, 3000);
+    return () => clearInterval(timer);
+  }, [roomId, navigate]);
+
   const loadData = async () => {
     try {
       const currentUser = await api.auth.me();
@@ -118,35 +137,42 @@ export default function GDRoom() {
         jitsiApiRef.current = null;
       }
 
-      if (room) {
-        await api.entities.GDRoom.update(room.id, {
-          status: 'completed'
-        });
-
-        const session = await api.entities.GDSession.create({
-          room_id: room.id,
-          room_code: room.room_code,
-          topic: room.topic,
-          domain: room.domain,
-          mode: room.mode,
-          duration: room.duration,
-          participants: room.participants?.map(p => ({
-            user_id: p.user_id,
-            name: p.name,
-            rating: 0,
-            liked: false,
-            is_friend: false
-          })) || [],
-          completed_at: new Date().toISOString()
-        });
-
-        navigate(createPageUrl(`GDAnalysis?sessionId=${session.id}`));
-      } else {
-        navigate(createPageUrl('GDArena'));
+      if (!room) {
+        navigate(createPageUrl('Dashboard'));
+        return;
       }
+
+      const hostId = room.host_id || room.created_by;
+      const amHost = user && (hostId === user.email || hostId === user.id);
+
+      if (!amHost) {
+        // Non-hosts simply leave
+        navigate(createPageUrl('Dashboard'));
+        return;
+      }
+
+      // Host ends the room and records session
+      await api.entities.GDRoom.update(room.id, { status: 'completed' });
+      const session = await api.entities.GDSession.create({
+        room_id: room.id,
+        room_code: room.room_code,
+        topic: room.topic,
+        domain: room.domain,
+        mode: room.mode,
+        duration: room.duration,
+        participants: room.participants?.map(p => ({
+          user_id: p.user_id,
+          name: p.name,
+          rating: 0,
+          liked: false,
+          is_friend: false
+        })) || [],
+        completed_at: new Date().toISOString()
+      });
+      navigate(createPageUrl(`GDAnalysis?sessionId=${session.id}`));
     } catch (error) {
       console.error('Error ending session:', error);
-      navigate(createPageUrl('GDArena'));
+      navigate(createPageUrl('Dashboard'));
     }
   };
 

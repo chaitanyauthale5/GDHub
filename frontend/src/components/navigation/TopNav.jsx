@@ -28,6 +28,7 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
   const loadNotifications = async () => {
     try {
       const me = await api.auth.me();
+
       if (!me) {
         setCurrentUser(null);
         setFriendRequests([]);
@@ -82,22 +83,26 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
     await api.entities.FriendRequest.update(request.id, { status: 'accepted' });
 
     // Add to both users' friends lists
-    const myProfiles = await api.entities.UserProfile.filter({ user_id: currentUser.email });
-    const theirProfiles = await api.entities.UserProfile.filter({ user_id: request.from_user_id });
-
-    if (myProfiles.length > 0) {
-      const myFriends = myProfiles[0].friends || [];
-      await api.entities.UserProfile.update(myProfiles[0].id, {
-        friends: [...myFriends, request.from_user_id]
-      });
+    let myProfiles = await api.entities.UserProfile.filter({ user_id: currentUser.email });
+    if (myProfiles.length === 0) {
+      myProfiles = await api.entities.UserProfile.filter({ user_id: currentUser.id });
+    }
+    let theirProfiles = await api.entities.UserProfile.filter({ user_id: request.from_user_id });
+    if (theirProfiles.length === 0) {
+      // create their profile if missing
+      const created = await api.entities.UserProfile.create({ user_id: request.from_user_id, xp_points: 0, level: 1, friends: [] });
+      theirProfiles = [created];
+    }
+    if (myProfiles.length === 0) {
+      const createdMine = await api.entities.UserProfile.create({ user_id: currentUser.email, xp_points: 0, level: 1, friends: [] });
+      myProfiles = [createdMine];
     }
 
-    if (theirProfiles.length > 0) {
-      const theirFriends = theirProfiles[0].friends || [];
-      await api.entities.UserProfile.update(theirProfiles[0].id, {
-        friends: [...theirFriends, currentUser.email]
-      });
-    }
+    const myFriends = Array.from(new Set([...(myProfiles[0].friends || []), request.from_user_id]));
+    await api.entities.UserProfile.update(myProfiles[0].id, { friends: myFriends });
+
+    const theirFriends = Array.from(new Set([...(theirProfiles[0].friends || []), currentUser.email]));
+    await api.entities.UserProfile.update(theirProfiles[0].id, { friends: theirFriends });
 
     // Send notification to the requester
     await api.entities.Notification.create({
@@ -120,6 +125,21 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
   const openChat = (friendId) => {
     navigate(createPageUrl(`Chat?friendId=${friendId}`));
     setShowChat(false);
+  };
+
+  const toggleNotifications = async () => {
+    const willOpen = !showNotifications;
+    setShowNotifications(willOpen);
+    setShowChat(false);
+    setShowProfileMenu(false);
+    if (willOpen && currentUser) {
+      try {
+        const unread = await api.entities.Notification.filter({ user_id: currentUser.email, is_read: false });
+        await Promise.all(unread.map(n => api.entities.Notification.update(n.id, { is_read: true })));
+        // refresh counts
+        loadNotifications();
+      } catch (e) { }
+    }
   };
 
   return (
@@ -160,11 +180,7 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
             {/* Notifications */}
             <div className="relative">
               <button
-                onClick={() => {
-                  setShowNotifications(!showNotifications);
-                  setShowChat(false);
-                  setShowProfileMenu(false);
-                }}
+                onClick={toggleNotifications}
                 className="p-2.5 sm:p-3 rounded-full bg-gray-100 hover:bg-gray-200 transition-all relative"
               >
                 <Bell className="w-5 h-5 text-gray-700" />

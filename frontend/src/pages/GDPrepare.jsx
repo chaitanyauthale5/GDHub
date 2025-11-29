@@ -19,6 +19,21 @@ export default function GDPrepare() {
   }, []);
 
   useEffect(() => {
+    let timer;
+    const poll = async () => {
+      try {
+        const data = await api.entities.GDRoom.filter({ id: roomId });
+        if (data.length === 0 || data[0].status === 'completed') {
+          navigate(createPageUrl('Dashboard'));
+        }
+      } catch {}
+    };
+    poll();
+    timer = setInterval(poll, 3000);
+    return () => clearInterval(timer);
+  }, [roomId, navigate]);
+
+  useEffect(() => {
     if (timeLeft <= 0) {
       navigate(createPageUrl(`GDRoom?roomId=${roomId}`));
       return;
@@ -36,6 +51,8 @@ export default function GDPrepare() {
       const roomData = await api.entities.GDRoom.filter({ id: roomId });
       if (roomData.length > 0) {
         setRoom(roomData[0]);
+      } else {
+        navigate(createPageUrl('Dashboard'));
       }
     } catch (error) {
       console.error('Error loading room:', error);

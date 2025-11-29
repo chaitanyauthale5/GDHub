@@ -1,6 +1,6 @@
 import { api } from '@/api/apiClient';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Award, Camera, Crown, LogOut, Mail, TrendingUp, Users } from 'lucide-react';
+import { Award, Camera, Crown, LogOut, Mail, TrendingUp, Users, UserPlus, Search, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import TopNav from '../components/navigation/TopNav';
 import AvatarSelector from '../components/shared/AvatarSelector';
@@ -12,6 +12,9 @@ export default function Profile() {
   const [profile, setProfile] = useState(null);
   const [recentSessions, setRecentSessions] = useState([]);
   const [showAvatarSelector, setShowAvatarSelector] = useState(false);
+  const [friendSearch, setFriendSearch] = useState('');
+  const [friendSearchResult, setFriendSearchResult] = useState(null);
+  const [friendBusy, setFriendBusy] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -29,9 +32,15 @@ export default function Profile() {
 
       setUser(currentUser);
 
-      const profiles = await api.entities.UserProfile.filter({ user_id: currentUser.id });
+      let profiles = await api.entities.UserProfile.filter({ user_id: currentUser.email });
+      if (profiles.length === 0) {
+        profiles = await api.entities.UserProfile.filter({ user_id: currentUser.id });
+      }
       if (profiles.length > 0) {
         setProfile(profiles[0]);
+      } else {
+        const created = await api.entities.UserProfile.create({ user_id: currentUser.email || currentUser.id, xp_points: 0, level: 1, friends: [] });
+        setProfile(created);
       }
 
       const gdSessions = await api.entities.GDSession.list('-created_date', 5);
@@ -55,6 +64,40 @@ export default function Profile() {
     await api.entities.UserProfile.update(profile.id, { avatar: avatarUrl });
     setProfile({ ...profile, avatar: avatarUrl });
     setShowAvatarSelector(false);
+  };
+
+  const searchFriend = async () => {
+    if (!friendSearch.trim()) return;
+    setFriendBusy(true);
+    try {
+      let res = await api.entities.User.filter({ id: friendSearch.trim() });
+      if (res.length === 0) {
+        res = await api.entities.User.filter({ email: friendSearch.trim() });
+      }
+      setFriendSearchResult(res[0] || null);
+    } finally {
+      setFriendBusy(false);
+    }
+  };
+
+  const addFriend = async () => {
+    if (!profile || !friendSearchResult) return;
+    const friendId = friendSearchResult.email || friendSearchResult.id;
+    const current = profile.friends || [];
+    if (current.includes(friendId)) return;
+    const updated = Array.from(new Set([...current, friendId]));
+    await api.entities.UserProfile.update(profile.id, { friends: updated });
+    setProfile({ ...profile, friends: updated });
+    setFriendSearch('');
+    setFriendSearchResult(null);
+  };
+
+  const removeFriend = async (fid) => {
+    if (!profile) return;
+    const current = profile.friends || [];
+    const updated = current.filter(f => f !== fid);
+    await api.entities.UserProfile.update(profile.id, { friends: updated });
+    setProfile({ ...profile, friends: updated });
   };
 
   return (
@@ -166,6 +209,49 @@ export default function Profile() {
             </div>
           </ClayCard>
         )}
+
+        <ClayCard className="mb-8">
+          <h2 className="text-2xl font-bold mb-4">Friends Management</h2>
+          <div className="flex flex-col md:flex-row gap-3 mb-4">
+            <div className="flex-1 flex items-center gap-2">
+              <Search className="w-5 h-5 text-gray-500" />
+              <input value={friendSearch} onChange={e => setFriendSearch(e.target.value)} placeholder="Enter user id or email" className="flex-1 px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-400" />
+            </div>
+            <button onClick={searchFriend} disabled={friendBusy || !friendSearch.trim()} className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold">
+              Search
+            </button>
+          </div>
+          {friendSearchResult && (
+            <div className="flex items-center justify-between p-3 rounded-xl bg-white/60 border mb-4">
+              <div>
+                <p className="font-semibold">{friendSearchResult.full_name || 'User'}</p>
+                <p className="text-sm text-gray-500">{friendSearchResult.email || friendSearchResult.id}</p>
+              </div>
+              <button onClick={addFriend} className="px-3 py-2 rounded-xl bg-green-500 text-white font-bold flex items-center gap-2">
+                <UserPlus className="w-4 h-4" />
+                Add Friend
+              </button>
+            </div>
+          )}
+          <div>
+            <h3 className="font-bold mb-2">Your Friends</h3>
+            {(profile?.friends && profile.friends.length > 0) ? (
+              <div className="space-y-2">
+                {profile.friends.map(fid => (
+                  <div key={fid} className="flex items-center justify-between p-3 rounded-xl bg-white/60 border">
+                    <span className="font-medium">{fid}</span>
+                    <button onClick={() => removeFriend(fid)} className="px-3 py-2 rounded-xl bg-red-500 text-white font-bold flex items-center gap-2">
+                      <X className="w-4 h-4" />
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No friends yet</p>
+            )}
+          </div>
+        </ClayCard>
 
         {/* Recent Activity */}
         <ClayCard>

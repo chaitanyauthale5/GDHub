@@ -29,14 +29,21 @@ export default function Leaderboard() {
         api.entities.User.list()
       ]);
       
-      // Create a map of user_id to user data
       const userMap = {};
-      allUsers.forEach(u => {
-        userMap[u.id] = u;
-        userMap[u.email] = u;
-      });
+      allUsers.forEach(u => { userMap[u.id] = u; userMap[u.email] = u; });
       setUsers(userMap);
-      setProfiles(allProfiles);
+
+      const seen = new Set();
+      const deduped = [];
+      for (const p of allProfiles) {
+        const u = userMap[p.user_id];
+        const key = (u && u.email) || p.user_id;
+        if (!seen.has(key)) {
+          seen.add(key);
+          deduped.push(p);
+        }
+      }
+      setProfiles(deduped);
     } catch (error) {
       console.error('Error loading data:', error);
     }
@@ -109,7 +116,9 @@ export default function Leaderboard() {
   };
 
   const viewProfile = (userId) => {
-    navigate(createPageUrl(`UserProfile?userId=${userId}`));
+    const target = users[userId] || Object.values(users).find(u => u.id === userId || u.email === userId);
+    const param = target?.email || userId;
+    navigate(createPageUrl(`UserProfile?userId=${param}`));
     setSelectedUser(null);
   };
 
@@ -297,7 +306,7 @@ export default function Leaderboard() {
                     <motion.div
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      className="absolute left-16 top-0 bg-white rounded-xl shadow-2xl border border-gray-100 p-2 z-50 min-w-[160px]"
+                      className="absolute left-16 top-0 bg-white rounded-xl shadow-2xl border border-gray-200 ring-1 ring-black/5 p-2 z-[100] min-w-[180px] backdrop-blur-sm"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <button
