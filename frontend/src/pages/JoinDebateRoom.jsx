@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
 import { LogIn, Hash, ArrowLeft } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
@@ -24,8 +24,8 @@ export default function JoinDebateRoom() {
     setError('');
     
     try {
-      const user = await base44.auth.me();
-      const rooms = await base44.entities.DebateRoom.filter({ 
+      const user = await api.auth.me();
+      const rooms = await api.entities.DebateRoom.filter({ 
         room_code: roomCode.toUpperCase(),
         status: { $in: ['lobby', 'active'] }
       }, '-created_date', 1);
@@ -58,7 +58,7 @@ export default function JoinDebateRoom() {
           joined_at: new Date().toISOString()
         }];
 
-        await base44.entities.DebateRoom.update(room.id, {
+        await api.entities.DebateRoom.update(room.id, {
           participants: updatedParticipants
         });
       }

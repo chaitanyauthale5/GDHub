@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
+
 import { motion } from 'framer-motion';
 import { Bot, Mic, MicOff, Clock, ArrowLeft, Volume2, VolumeX, Send, LogOut } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -52,7 +53,7 @@ export default function AIInterviewAI() {
   }, [conversation]);
 
   const loadUser = async () => {
-    const currentUser = await base44.auth.me();
+    const currentUser = await api.auth.me();
     setUser(currentUser);
   };
 
@@ -114,7 +115,7 @@ export default function AIInterviewAI() {
     Start with a warm greeting and ask the first interview question. Be professional but friendly. 
     Keep responses conversational and under 100 words.`;
 
-    const response = await base44.integrations.Core.InvokeLLM({
+    const response = await api.integrations.Core.InvokeLLM({
       prompt: interviewContext,
       response_json_schema: {
         type: "object",
@@ -139,7 +140,7 @@ export default function AIInterviewAI() {
 
     const conversationHistory = conversation.map(m => `${m.role === 'ai' ? 'Interviewer' : 'Candidate'}: ${m.content}`).join('\n');
     
-    const response = await base44.integrations.Core.InvokeLLM({
+    const response = await api.integrations.Core.InvokeLLM({
       prompt: `You are an AI interviewer conducting a ${config.interview_type} interview. 
       
 Previous conversation:
@@ -178,7 +179,7 @@ Keep your response under 100 words and conversational.`,
     setLoading(true);
     const conversationText = conversation.map(m => `${m.role === 'ai' ? 'Interviewer' : 'Candidate'}: ${m.content}`).join('\n');
     
-    const analysis = await base44.integrations.Core.InvokeLLM({
+    const analysis = await api.integrations.Core.InvokeLLM({
       prompt: `Analyze this interview conversation and provide feedback:
 
 ${conversationText}

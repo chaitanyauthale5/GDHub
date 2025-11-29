@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
+
 import { motion } from 'framer-motion';
 import { Users, Clock, ArrowLeft, RefreshCw, LogIn, Search } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
@@ -23,11 +24,12 @@ export default function BrowseRooms() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
+
       setUser(currentUser);
 
       // Get all rooms in lobby status that aren't full
-      const availableRooms = await base44.entities.GDRoom.filter(
+      const availableRooms = await api.entities.GDRoom.filter(
         { status: 'lobby' },
         '-created_date',
         20
@@ -70,7 +72,7 @@ export default function BrowseRooms() {
           joined_at: new Date().toISOString()
         }];
 
-        await base44.entities.GDRoom.update(room.id, {
+        await api.entities.GDRoom.update(room.id, {
           participants: updatedParticipants
         });
       }

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
+
 import { Mic, Users, Sparkles, Clock, Filter, Trophy } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
@@ -19,7 +20,7 @@ export default function ExtemporePractice() {
 
   const loadTopics = async () => {
     try {
-      const allTopics = await base44.entities.ExtemporeTopic.list();
+      const allTopics = await api.entities.ExtemporeTopic.list();
       setTopics(allTopics);
     } catch (error) {
       console.error('Error loading topics:', error);

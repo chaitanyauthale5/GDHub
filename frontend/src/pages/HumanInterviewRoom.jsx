@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
+
 import { Users, Clock, ArrowLeft, LogOut, Copy, Check } from 'lucide-react';
 
 export default function HumanInterviewRoom() {
@@ -43,15 +44,15 @@ export default function HumanInterviewRoom() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
       setUser(currentUser);
 
-      const [roomData] = await base44.entities.AIInterview.filter({ id: roomId });
+      const [roomData] = await api.entities.AIInterview.filter({ id: roomId });
       if (roomData) {
         setRoom(roomData);
         
         if (roomData.status === 'lobby') {
-          await base44.entities.AIInterview.update(roomId, { status: 'active' });
+          await api.entities.AIInterview.update(roomId, { status: 'active' });
         }
       }
     } catch (error) {
@@ -97,7 +98,7 @@ export default function HumanInterviewRoom() {
         apiRef.current = null;
       }
       if (roomId) {
-        await base44.entities.AIInterview.update(roomId, { status: 'completed' });
+        await api.entities.AIInterview.update(roomId, { status: 'completed' });
       }
     } catch (error) {
       console.error('Error ending interview:', error);

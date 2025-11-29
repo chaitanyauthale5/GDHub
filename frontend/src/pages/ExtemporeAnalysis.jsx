@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
+
 import { motion } from 'framer-motion';
 import { Award, TrendingUp, AlertCircle, CheckCircle, Mic, Clock, MessageSquare, Home, RotateCcw } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
@@ -20,7 +21,8 @@ export default function ExtemporeAnalysis() {
 
   const loadSessionAndAnalyze = async () => {
     try {
-      const sessions = await base44.entities.ExtemporeSession.filter({ id: sessionId });
+      const sessions = await api.entities.ExtemporeSession.filter({ id: sessionId });
+
       if (sessions.length > 0) {
         setSession(sessions[0]);
         await generateAnalysis(sessions[0]);
@@ -33,7 +35,8 @@ export default function ExtemporeAnalysis() {
 
   const generateAnalysis = async (sessionData) => {
     try {
-      const response = await base44.integrations.Core.InvokeLLM({
+      const response = await api.integrations.Core.InvokeLLM({
+
         prompt: `Analyze this extempore speaking session and provide detailed feedback:
 
 Topic: ${sessionData.topic}

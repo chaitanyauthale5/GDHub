@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
+
 import { motion } from 'framer-motion';
 import { User, Flame, ArrowLeft, UserPlus, Check, MessageCircle } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
@@ -25,11 +26,12 @@ export default function UserProfile() {
 
   const loadData = async () => {
     try {
-      const me = await base44.auth.me();
+      const me = await api.auth.me();
+
       setCurrentUser(me);
 
       // Get all users
-      const allUsers = await base44.entities.User.list();
+      const allUsers = await api.entities.User.list();
       
       // Find target user - try multiple matching strategies
       let targetUser = allUsers.find(u => u.id === userId);
@@ -40,7 +42,8 @@ export default function UserProfile() {
       // If still not found, the userId might be the profile's user_id
       if (!targetUser) {
         // Get all profiles and find the one matching
-        const allProfiles = await base44.entities.UserProfile.list();
+        const allProfiles = await api.entities.UserProfile.list();
+
         const matchingProfile = allProfiles.find(p => p.user_id === userId);
         if (matchingProfile) {
           targetUser = allUsers.find(u => u.email === matchingProfile.user_id || u.id === matchingProfile.user_id);
@@ -53,9 +56,9 @@ export default function UserProfile() {
       if (targetUser) {
         // Get profile if not already found
         if (!profile) {
-          let profiles = await base44.entities.UserProfile.filter({ user_id: targetUser.email });
+          let profiles = await api.entities.UserProfile.filter({ user_id: targetUser.email });
           if (profiles.length === 0) {
-            profiles = await base44.entities.UserProfile.filter({ user_id: targetUser.id });
+            profiles = await api.entities.UserProfile.filter({ user_id: targetUser.id });
           }
           
           if (profiles.length > 0) {
@@ -64,9 +67,9 @@ export default function UserProfile() {
         }
 
         // Check if already friends - check my profile
-        let myProfiles = await base44.entities.UserProfile.filter({ user_id: me.email });
+        let myProfiles = await api.entities.UserProfile.filter({ user_id: me.email });
         if (myProfiles.length === 0) {
-          myProfiles = await base44.entities.UserProfile.filter({ user_id: me.id });
+          myProfiles = await api.entities.UserProfile.filter({ user_id: me.id });
         }
         
         if (myProfiles.length > 0 && myProfiles[0].friends) {
@@ -76,11 +79,12 @@ export default function UserProfile() {
         }
 
         // Check if friend request already sent
-        const existingRequests = await base44.entities.FriendRequest.filter({
+        const existingRequests = await api.entities.FriendRequest.filter({
           from_user_id: me.email,
           to_user_id: targetUser.email,
           status: 'pending'
         });
+
         if (existingRequests.length > 0) {
           setFriendRequestSent(true);
         }
@@ -101,16 +105,16 @@ export default function UserProfile() {
       return;
     }
 
-    await base44.entities.FriendRequest.create({
+    await api.entities.FriendRequest.create({
       from_user_id: currentUser.email,
       from_user_name: currentUser.full_name,
       to_user_id: viewedUser.email,
-      to_user_name: viewedUser.full_name,
+      message: `${currentUser.full_name} wants to be your friend`,
       status: 'pending'
     });
 
     // Create notification
-    await base44.entities.Notification.create({
+    await api.entities.Notification.create({
       user_id: viewedUser.email,
       type: 'friend_request',
       title: 'New Friend Request',

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion, AnimatePresence } from 'framer-motion';
+
 import { Users, Clock, Copy, Check, Play, Camera, Mic, ArrowLeft, LogOut, UserPlus, Share2, MessageSquare } from 'lucide-react';
 import ClayCard from '../components/shared/ClayCard';
 import GlassPanel from '../components/shared/GlassPanel';
@@ -26,11 +27,12 @@ export default function Lobby() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
       setUser(currentUser);
 
       // Fetch room by ID directly
-      const roomData = await base44.entities.GDRoom.filter({ id: roomId });
+      const roomData = await api.entities.GDRoom.filter({ id: roomId });
+
       if (roomData.length > 0) {
         const fetchedRoom = roomData[0];
         setRoom(fetchedRoom);
@@ -54,7 +56,7 @@ export default function Lobby() {
   const startSession = async () => {
     if (!room) return;
 
-    await base44.entities.GDRoom.update(room.id, {
+    await api.entities.GDRoom.update(room.id, {
       status: 'active',
       started_at: new Date().toISOString()
     });
@@ -68,7 +70,7 @@ export default function Lobby() {
     
     // Remove user from participants
     const updatedParticipants = room.participants.filter(p => p.user_id !== user.email && p.user_id !== user.id);
-    await base44.entities.GDRoom.update(room.id, {
+    await api.entities.GDRoom.update(room.id, {
       participants: updatedParticipants
     });
     

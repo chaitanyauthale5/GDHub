@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion, AnimatePresence } from 'framer-motion';
+
 import { Users, Clock, Copy, Check, Play, ArrowLeft, LogOut, Share2, ThumbsUp, ThumbsDown, Swords, MessageSquare } from 'lucide-react';
 import ClayCard from '../components/shared/ClayCard';
 
@@ -23,7 +24,7 @@ export default function DebateLobby() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
       setUser(currentUser);
 
       if (!roomId) {
@@ -31,7 +32,8 @@ export default function DebateLobby() {
         return;
       }
 
-      const roomData = await base44.entities.DebateRoom.filter({ id: roomId });
+      const roomData = await api.entities.DebateRoom.filter({ id: roomId });
+
       if (roomData.length > 0) {
         const fetchedRoom = roomData[0];
         setRoom(fetchedRoom);
@@ -57,7 +59,7 @@ export default function DebateLobby() {
   const startDebate = async () => {
     if (!room) return;
 
-    await base44.entities.DebateRoom.update(room.id, {
+    await api.entities.DebateRoom.update(room.id, {
       status: 'active',
       started_at: new Date().toISOString()
     });
@@ -69,7 +71,7 @@ export default function DebateLobby() {
     if (!room || !user) return;
     
     const updatedParticipants = room.participants.filter(p => p.user_id !== user.email);
-    await base44.entities.DebateRoom.update(room.id, {
+    await api.entities.DebateRoom.update(room.id, {
       participants: updatedParticipants
     });
     

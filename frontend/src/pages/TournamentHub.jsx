@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
+
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Search, Plus, Users, Calendar, Lock, Globe, ArrowRight, X, Building2, GraduationCap } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
@@ -32,12 +33,13 @@ export default function TournamentHub() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
+
       setUser(currentUser);
 
       const [tournamentsData, registrationsData] = await Promise.all([
-        base44.entities.Tournament.filter({ type: tournamentType, visibility: 'public', status: 'registering' }),
-        base44.entities.TournamentRegistration.filter({ user_id: currentUser.email })
+        api.entities.Tournament.filter({ type: tournamentType, visibility: 'public', status: 'registering' }),
+        api.entities.TournamentRegistration.filter({ user_id: currentUser.email })
       ]);
 
       setTournaments(tournamentsData);
@@ -53,7 +55,8 @@ export default function TournamentHub() {
     if (!searchId.trim()) return;
     
     try {
-      const results = await base44.entities.Tournament.filter({ tournament_id: searchId.toUpperCase() });
+      const results = await api.entities.Tournament.filter({ tournament_id: searchId.toUpperCase() });
+
       if (results.length > 0) {
         setSearchResult(results[0]);
       } else {
@@ -78,7 +81,7 @@ export default function TournamentHub() {
     
     const generatedPassword = Math.random().toString(36).substring(2, 8).toUpperCase();
     
-    const registration = await base44.entities.TournamentRegistration.create({
+    const registration = await api.entities.TournamentRegistration.create({
       tournament_id: tournament.id,
       user_id: user.email,
       user_name: user.full_name,
@@ -88,7 +91,7 @@ export default function TournamentHub() {
     });
 
     // Send email with password
-    await base44.integrations.Core.SendEmail({
+    await api.integrations.Core.SendEmail({
       to: user.email,
       subject: `Tournament Registration: ${tournament.name}`,
       body: `

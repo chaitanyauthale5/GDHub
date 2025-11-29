@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Mail, Award, TrendingUp, Users, LogOut, Crown, Camera } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
@@ -19,16 +19,16 @@ export default function Profile() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
       setUser(currentUser);
 
-      const profiles = await base44.entities.UserProfile.filter({ user_id: currentUser.id });
+      const profiles = await api.entities.UserProfile.filter({ user_id: currentUser.id });
       if (profiles.length > 0) {
         setProfile(profiles[0]);
       }
 
-      const gdSessions = await base44.entities.GDSession.list('-created_date', 5);
-      const extemporeSessions = await base44.entities.ExtemporeSession.filter(
+      const gdSessions = await api.entities.GDSession.list('-created_date', 5);
+      const extemporeSessions = await api.entities.ExtemporeSession.filter(
         { user_id: currentUser.id },
         '-created_date',
         5
@@ -40,12 +40,12 @@ export default function Profile() {
   };
 
   const handleLogout = () => {
-    base44.auth.logout();
+    api.auth.logout();
   };
 
   const handleAvatarSelect = async (avatarUrl) => {
     if (!profile) return;
-    await base44.entities.UserProfile.update(profile.id, { avatar: avatarUrl });
+    await api.entities.UserProfile.update(profile.id, { avatar: avatarUrl });
     setProfile({ ...profile, avatar: avatarUrl });
     setShowAvatarSelector(false);
   };

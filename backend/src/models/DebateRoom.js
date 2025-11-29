@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const ParticipantSchema = new mongoose.Schema({
     user_id: { type: String, required: true },
     user_name: { type: String },
-    side: { type: String, enum: ['pro', 'con', 'neutral'], default: 'neutral' }
+    side: { type: String, enum: ['for', 'against', 'neutral'], default: 'neutral' }
 }, { _id: false });
 const DebateRoomSchema = new mongoose.Schema({
     room_code: { type: String, required: true, unique: true },

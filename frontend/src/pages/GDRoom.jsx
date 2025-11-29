@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
+
 import { X, Clock, Users, MessageSquare, ArrowLeft } from 'lucide-react';
 
 export default function GDRoom() {
@@ -56,10 +57,10 @@ export default function GDRoom() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
       setUser(currentUser);
       
-      const roomData = await base44.entities.GDRoom.filter({ id: roomId });
+      const roomData = await api.entities.GDRoom.filter({ id: roomId });
       if (roomData.length > 0) {
         setRoom(roomData[0]);
       }
@@ -118,11 +119,11 @@ export default function GDRoom() {
       }
 
       if (room) {
-        await base44.entities.GDRoom.update(room.id, {
+        await api.entities.GDRoom.update(room.id, {
           status: 'completed'
         });
 
-        const session = await base44.entities.GDSession.create({
+        const session = await api.entities.GDSession.create({
           room_id: room.id,
           room_code: room.room_code,
           topic: room.topic,

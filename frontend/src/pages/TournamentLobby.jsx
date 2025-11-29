@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
+
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Users, Clock, ArrowLeft, Play, Shuffle, CheckCircle2 } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
@@ -29,14 +30,17 @@ export default function TournamentLobby() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
+
       setUser(currentUser);
 
-      const [tournamentData] = await base44.entities.Tournament.filter({ id: tournamentId });
+      const [tournamentData] = await api.entities.Tournament.filter({ id: tournamentId });
+
       setTournament(tournamentData);
       setIsHost(tournamentData.host_id === currentUser.email);
 
-      const regs = await base44.entities.TournamentRegistration.filter({ tournament_id: tournamentId, status: 'joined' });
+      const regs = await api.entities.TournamentRegistration.filter({ tournament_id: tournamentId, status: 'joined' });
+
       setRegistrations(regs);
 
       // Check if groups are already formed
@@ -72,13 +76,14 @@ export default function TournamentLobby() {
   };
 
   const joinLobby = async () => {
-    const myReg = await base44.entities.TournamentRegistration.filter({ 
+    const myReg = await api.entities.TournamentRegistration.filter({ 
       tournament_id: tournamentId, 
       user_id: user.email 
     });
     
     if (myReg.length > 0) {
-      await base44.entities.TournamentRegistration.update(myReg[0].id, { status: 'joined' });
+      await api.entities.TournamentRegistration.update(myReg[0].id, { status: 'joined' });
+
       loadData();
     }
   };
@@ -94,9 +99,10 @@ export default function TournamentLobby() {
     
     for (let i = 0; i < shuffled.length; i++) {
       if (i % groupSize === 0) groupNumber++;
-      await base44.entities.TournamentRegistration.update(shuffled[i].id, {
+      await api.entities.TournamentRegistration.update(shuffled[i].id, {
         group_number: groupNumber
       });
+
     }
     
     setGroupsFormed(true);
@@ -106,7 +112,8 @@ export default function TournamentLobby() {
   const startTournament = async () => {
     if (!isHost || !groupsFormed) return;
     
-    await base44.entities.Tournament.update(tournamentId, { status: 'active' });
+    await api.entities.Tournament.update(tournamentId, { status: 'active' });
+
     
     // Create rooms for each group
     for (let i = 0; i < groups.length; i++) {
@@ -114,7 +121,8 @@ export default function TournamentLobby() {
       const roomCode = `T${tournament.tournament_id.substring(1, 4)}G${i + 1}`;
       
       if (tournament.type === 'gd') {
-        await base44.entities.GDRoom.create({
+        await api.entities.GDRoom.create({
+
           room_code: roomCode,
           host_id: tournament.host_id,
           mode: 'tournament',
@@ -131,7 +139,8 @@ export default function TournamentLobby() {
           tournament_id: tournamentId
         });
       } else if (tournament.type === 'debate') {
-        await base44.entities.DebateRoom.create({
+        await api.entities.DebateRoom.create({
+
           room_code: roomCode,
           host_id: tournament.host_id,
           mode: 'tournament',
@@ -152,7 +161,8 @@ export default function TournamentLobby() {
     
     // Navigate to the room
     if (tournament.type === 'gd') {
-      const rooms = await base44.entities.GDRoom.filter({ tournament_id: tournamentId });
+      const rooms = await api.entities.GDRoom.filter({ tournament_id: tournamentId });
+
       const myRoom = rooms.find(r => r.participants.some(p => p.user_id === user.email));
       if (myRoom) {
         navigate(createPageUrl(`Lobby?roomId=${myRoom.id}`));

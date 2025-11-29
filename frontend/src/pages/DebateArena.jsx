@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
+
 import { Globe, Settings, Trophy, Sparkles, Users, Swords, Plus, LogIn, X } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
@@ -18,8 +19,9 @@ export default function DebateArena() {
 
   const loadUser = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
       setUser(currentUser);
+
     } catch (error) {
       console.error('Error loading user:', error);
     }
@@ -41,7 +43,7 @@ export default function DebateArena() {
     ];
     const topic = topics[Math.floor(Math.random() * topics.length)];
     
-    const room = await base44.entities.DebateRoom.create({
+    const room = await api.entities.DebateRoom.create({
       room_code: roomCode,
       host_id: user.email,
       mode: 'global',

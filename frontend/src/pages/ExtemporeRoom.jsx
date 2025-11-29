@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Mic, MicOff, Camera, VideoOff, Play, Square } from 'lucide-react';
 import ClayCard from '../components/shared/ClayCard';
@@ -53,8 +53,8 @@ export default function ExtemporeRoom() {
 
   const handleComplete = async () => {
     try {
-      const user = await base44.auth.me();
-      const session = await base44.entities.ExtemporeSession.create({
+      const user = await api.auth.me();
+      const session = await api.entities.ExtemporeSession.create({
         user_id: user.id,
         topic: topic,
         difficulty: 'medium',

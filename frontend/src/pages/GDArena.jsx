@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
+
 import { motion } from 'framer-motion';
 import { Globe, Settings, Trophy, Sparkles, Users, Clock, Award, Plus, LogIn, X, Search } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
@@ -17,8 +18,9 @@ export default function GDArena() {
 
   const loadUser = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
       setUser(currentUser);
+
     } catch (error) {
       console.error('Error loading user:', error);
     }
@@ -26,12 +28,12 @@ export default function GDArena() {
 
   const startGlobalMatch = async () => {
     if (!user) return;
-    
+
     // Use a more unique room code to ensure new room creation
     const timestamp = Date.now().toString(36).substring(-4);
     const random = Math.random().toString(36).substring(2, 6);
     const roomCode = (timestamp + random).toUpperCase().substring(0, 6);
-    
+
     const topics = [
       'The impact of artificial intelligence on employment',
       'Social media regulation and free speech',
@@ -40,8 +42,8 @@ export default function GDArena() {
       'Education system reforms needed today'
     ];
     const topic = topics[Math.floor(Math.random() * topics.length)];
-    
-    const room = await base44.entities.GDRoom.create({
+
+    const room = await api.entities.GDRoom.create({
       room_code: roomCode,
       host_id: user.email,
       mode: 'global',

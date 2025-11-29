@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
+
 import { motion } from 'framer-motion';
 import { ArrowLeft, Send, User } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
@@ -32,10 +33,12 @@ export default function Chat() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
+
       setUser(currentUser);
 
-      const allUsers = await base44.entities.User.list();
+      const allUsers = await api.entities.User.list();
+
       const friendUser = allUsers.find(u => u.id === friendId || u.email === friendId);
       setFriend(friendUser);
 
@@ -51,11 +54,11 @@ export default function Chat() {
     if (!friendId) return;
     
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
       
       // Get messages between the two users
-      const allMessages = await base44.entities.ChatMessage.list('-created_date', 100);
-      
+      const allMessages = await api.entities.ChatMessage.list('-created_date', 100);
+
       const conversation = allMessages.filter(m => 
         (m.from_user_id === currentUser.email && m.to_user_id === friendId) ||
         (m.from_user_id === friendId && m.to_user_id === currentUser.email)
@@ -68,7 +71,8 @@ export default function Chat() {
         m.to_user_id === currentUser.email && !m.is_read
       );
       for (const msg of unreadMessages) {
-        await base44.entities.ChatMessage.update(msg.id, { is_read: true });
+        await api.entities.ChatMessage.update(msg.id, { is_read: true });
+
       }
     } catch (error) {
       console.error('Error loading messages:', error);
@@ -78,7 +82,7 @@ export default function Chat() {
   const sendMessage = async () => {
     if (!inputMessage.trim() || !user || !friend) return;
 
-    await base44.entities.ChatMessage.create({
+    await api.entities.ChatMessage.create({
       from_user_id: user.email,
       from_user_name: user.full_name,
       to_user_id: friend.email,

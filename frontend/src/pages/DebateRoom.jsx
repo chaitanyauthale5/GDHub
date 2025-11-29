@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
+
 import { Swords, Clock, ThumbsUp, ThumbsDown, X, ArrowLeft, LogOut } from 'lucide-react';
 
 export default function DebateRoom() {
@@ -49,10 +50,10 @@ export default function DebateRoom() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
       setUser(currentUser);
 
-      const [roomData] = await base44.entities.DebateRoom.filter({ id: roomId });
+      const [roomData] = await api.entities.DebateRoom.filter({ id: roomId });
       setRoom(roomData);
       setTimeLeft(roomData.duration * 60);
     } catch (error) {
@@ -92,7 +93,7 @@ export default function DebateRoom() {
   };
 
   const endDebate = async () => {
-    await base44.entities.DebateRoom.update(roomId, { status: 'completed' });
+    await api.entities.DebateRoom.update(roomId, { status: 'completed' });
     if (apiRef.current) {
       apiRef.current.dispose();
     }

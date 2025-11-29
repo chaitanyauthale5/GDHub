@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
+
 import { ThumbsUp, UserPlus, Sparkles, TrendingUp, Award } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
@@ -23,10 +24,10 @@ export default function PostGDFeedback() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
       setUser(currentUser);
 
-      const sessionData = await base44.entities.GDSession.filter({ id: sessionId });
+      const sessionData = await api.entities.GDSession.filter({ id: sessionId });
       if (sessionData.length > 0) {
         setSession(sessionData[0]);
       }

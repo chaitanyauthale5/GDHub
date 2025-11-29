@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
+
 import { motion } from 'framer-motion';
 import { Bot, Mic, MicOff, Video, VideoOff, PhoneOff, Send, User, Clock, Copy, Check, ArrowLeft } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
@@ -43,15 +44,18 @@ export default function AIInterviewRoom() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
+
       setUser(currentUser);
 
-      const [roomData] = await base44.entities.AIInterview.filter({ id: roomId });
+      const [roomData] = await api.entities.AIInterview.filter({ id: roomId });
+
       setRoom(roomData);
 
       if (roomData.status === 'lobby') {
         // Start the interview
-        await base44.entities.AIInterview.update(roomId, { status: 'active' });
+        await api.entities.AIInterview.update(roomId, { status: 'active' });
+
         setRoom({ ...roomData, status: 'active' });
         
         // Initial AI greeting
@@ -82,7 +86,7 @@ ${conversationHistory.length === 0
   ? 'Start by introducing yourself and asking the first interview question.'
   : 'Respond naturally to the candidate, provide brief feedback if appropriate, then ask a follow-up or new question. Keep responses concise.'}`;
 
-    const response = await base44.integrations.Core.InvokeLLM({
+    const response = await api.integrations.Core.InvokeLLM({
       prompt,
       response_json_schema: {
         type: 'object',
@@ -106,6 +110,7 @@ ${conversationHistory.length === 0
 
     try {
       const aiResponse = await generateAIResponse(room, newMessages);
+
       setMessages([...newMessages, { role: 'ai', content: aiResponse }]);
     } catch (error) {
       console.error('Error getting AI response:', error);
@@ -115,7 +120,8 @@ ${conversationHistory.length === 0
   };
 
   const endInterview = async () => {
-    await base44.entities.AIInterview.update(roomId, { status: 'completed' });
+    await api.entities.AIInterview.update(roomId, { status: 'completed' });
+
     navigate(createPageUrl('AIInterviewHub'));
   };
 

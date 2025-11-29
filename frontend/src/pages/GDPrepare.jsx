@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
+
 import { Clock, Users, BookOpen, Sparkles } from 'lucide-react';
 
 export default function GDPrepare() {
@@ -32,7 +33,7 @@ export default function GDPrepare() {
 
   const loadRoom = async () => {
     try {
-      const roomData = await base44.entities.GDRoom.filter({ id: roomId });
+      const roomData = await api.entities.GDRoom.filter({ id: roomId });
       if (roomData.length > 0) {
         setRoom(roomData[0]);
       }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, Mic, MicOff, Sparkles, ArrowRight, RefreshCw, Volume2, VolumeX, Square, Play, Edit3, ArrowLeft } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
@@ -52,7 +52,7 @@ export default function SoloPractice() {
 
   const loadUser = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
       setUser(currentUser);
     } catch (error) {
       console.error('Error loading user:', error);
@@ -169,7 +169,7 @@ export default function SoloPractice() {
     setUserInput('');
 
     try {
-      const response = await base44.integrations.Core.InvokeLLM({
+      const response = await api.integrations.Core.InvokeLLM({
         prompt: `You are an expert communication coach helping someone practice their speaking skills in a real-time voice conversation.
 
 Topic: "${currentTopic}"

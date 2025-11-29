@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
+
 import { motion } from 'framer-motion';
 import { Award, TrendingUp, AlertCircle, CheckCircle, Bot, Mic, MessageSquare, Home, RotateCcw } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
@@ -36,7 +37,7 @@ export default function SoloAnalysis() {
     try {
       const userMessages = messagesData.filter(m => m.role === 'user').map(m => m.content).join(' ');
       
-      const response = await base44.integrations.Core.InvokeLLM({
+      const response = await api.integrations.Core.InvokeLLM({
         prompt: `Analyze this solo speaking practice session and provide detailed feedback:
 
 Topic: ${topicData}

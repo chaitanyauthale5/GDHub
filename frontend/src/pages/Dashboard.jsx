@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
+
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { motion } from 'framer-motion';
@@ -18,14 +19,16 @@ export default function Dashboard() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
+
       setUser(currentUser);
 
-      const profiles = await base44.entities.UserProfile.filter({ user_id: currentUser.id });
+      const profiles = await api.entities.UserProfile.filter({ user_id: currentUser.id });
+
       if (profiles.length > 0) {
         setProfile(profiles[0]);
       } else {
-        const newProfile = await base44.entities.UserProfile.create({
+        const newProfile = await api.entities.UserProfile.create({
           user_id: currentUser.id,
           xp_points: 0,
           level: 1
@@ -35,10 +38,10 @@ export default function Dashboard() {
 
       // Fetch all types of sessions for recent activity
       const [gdSessions, extemporeSessions, gdRooms, aiInterviews] = await Promise.all([
-        base44.entities.GDSession.list('-created_date', 20),
-        base44.entities.ExtemporeSession.list('-created_date', 20),
-        base44.entities.GDRoom.filter({ status: 'completed' }, '-created_date', 20),
-        base44.entities.AIInterview.filter({ status: 'completed' }, '-created_date', 20)
+        api.entities.GDSession.list('-created_date', 20),
+        api.entities.ExtemporeSession.list('-created_date', 20),
+        api.entities.GDRoom.filter({ status: 'completed' }, '-created_date', 20),
+        api.entities.AIInterview.filter({ status: 'completed' }, '-created_date', 20)
       ]);
 
       // Filter sessions that belong to current user

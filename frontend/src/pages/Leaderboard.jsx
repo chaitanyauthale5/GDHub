@@ -1,4 +1,4 @@
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
 import { Award, Crown, Eye, Flame, Star, Trophy, UserPlus, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -20,12 +20,13 @@ export default function Leaderboard() {
 
   const loadData = async () => {
     try {
-      const user = await base44.auth.me();
+      const user = await api.auth.me();
+
       setCurrentUser(user);
 
       const [allProfiles, allUsers] = await Promise.all([
-        base44.entities.UserProfile.list('-xp_points', 20),
-        base44.entities.User.list()
+        api.entities.UserProfile.list('-xp_points', 20),
+        api.entities.User.list()
       ]);
       
       // Create a map of user_id to user data
@@ -58,9 +59,9 @@ export default function Leaderboard() {
     const targetEmail = targetUser?.email || profileUserId;
     
     // Check if already friends
-    let myProfile = await base44.entities.UserProfile.filter({ user_id: currentUser.email });
+    let myProfile = await api.entities.UserProfile.filter({ user_id: currentUser.email });
     if (myProfile.length === 0) {
-      myProfile = await base44.entities.UserProfile.filter({ user_id: currentUser.id });
+      myProfile = await api.entities.UserProfile.filter({ user_id: currentUser.id });
     }
     
     if (myProfile.length > 0 && myProfile[0].friends) {
@@ -72,7 +73,7 @@ export default function Leaderboard() {
     }
     
     // Check if request already exists
-    const existingRequests = await base44.entities.FriendRequest.filter({
+    const existingRequests = await api.entities.FriendRequest.filter({
       from_user_id: currentUser.email,
       to_user_id: targetEmail,
       status: 'pending'
@@ -85,7 +86,7 @@ export default function Leaderboard() {
     }
     
     // Create friend request with recipient's email
-    await base44.entities.FriendRequest.create({
+    await api.entities.FriendRequest.create({
       from_user_id: currentUser.email,
       from_user_name: currentUser.full_name,
       to_user_id: targetEmail,
@@ -94,7 +95,7 @@ export default function Leaderboard() {
     });
 
     // Create notification for the recipient using their email
-    await base44.entities.Notification.create({
+    await api.entities.Notification.create({
       user_id: targetEmail,
       type: 'friend_request',
       title: 'New Friend Request',

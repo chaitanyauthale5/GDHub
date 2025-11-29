@@ -1,4 +1,4 @@
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
 import { Award, BarChart3, Bot, Calendar, Clock, Flame, MessageSquare, Mic, Target, TrendingUp } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -26,24 +26,26 @@ export default function Progress() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await api.auth.me();
+
       setUser(currentUser);
 
       // Get user profile
-      let profiles = await base44.entities.UserProfile.filter({ user_id: currentUser.email });
+      let profiles = await api.entities.UserProfile.filter({ user_id: currentUser.email });
       if (profiles.length === 0) {
-        profiles = await base44.entities.UserProfile.filter({ user_id: currentUser.id });
+        profiles = await api.entities.UserProfile.filter({ user_id: currentUser.id });
       }
+
       if (profiles.length > 0) {
         setProfile(profiles[0]);
       }
 
       // Fetch all session types
       const [gdSessions, extemporeSessions, aiInterviews, gdRooms] = await Promise.all([
-        base44.entities.GDSession.list('-created_date', 100),
-        base44.entities.ExtemporeSession.list('-created_date', 100),
-        base44.entities.AIInterview.list('-created_date', 100),
-        base44.entities.GDRoom.filter({ status: 'completed' }, '-created_date', 100)
+        api.entities.GDSession.list('-created_date', 100),
+        api.entities.ExtemporeSession.list('-created_date', 100),
+        api.entities.AIInterview.list('-created_date', 100),
+        api.entities.GDRoom.filter({ status: 'completed' }, '-created_date', 100)
       ]);
 
       // Filter user sessions

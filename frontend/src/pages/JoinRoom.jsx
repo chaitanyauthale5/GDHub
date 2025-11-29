@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
 import { LogIn, Hash, ArrowLeft, AlertTriangle } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
@@ -21,11 +21,12 @@ export default function JoinRoom() {
 
   const checkHostedRoom = async () => {
     try {
-      const user = await base44.auth.me();
-      const hostedRooms = await base44.entities.GDRoom.filter({
+      const user = await api.auth.me();
+      const hostedRooms = await api.entities.GDRoom.filter({
         host_id: user.email,
         status: 'lobby'
       });
+
       if (hostedRooms.length > 0) {
         setMyHostedRoom(hostedRooms[0]);
       }
@@ -50,9 +51,9 @@ export default function JoinRoom() {
     setError('');
     
     try {
-      const user = await base44.auth.me();
+      const user = await api.auth.me();
       // Only find rooms that are in lobby status (not completed or old rooms)
-      const rooms = await base44.entities.GDRoom.filter({ 
+      const rooms = await api.entities.GDRoom.filter({ 
         room_code: roomCode.toUpperCase(),
         status: { $in: ['lobby', 'active'] }
       }, '-created_date', 1);
@@ -88,7 +89,7 @@ export default function JoinRoom() {
           joined_at: new Date().toISOString()
         }];
 
-        await base44.entities.GDRoom.update(room.id, {
+        await api.entities.GDRoom.update(room.id, {
           participants: updatedParticipants
         });
       }

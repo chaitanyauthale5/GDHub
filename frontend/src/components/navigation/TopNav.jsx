@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../../utils';
 import { Bell, MessageCircle, User, LogOut, Info, Check, X, UserPlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import XPBadge from '../shared/XPBadge';
 import { AVATARS } from '../shared/AvatarSelector';
 
@@ -28,33 +28,33 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
 
   const loadNotifications = async () => {
     try {
-      const me = await base44.auth.me();
+      const me = await api.auth.me();
       setCurrentUser(me);
 
       // Get pending friend requests
-      const pendingRequests = await base44.entities.FriendRequest.filter({
+      const pendingRequests = await api.entities.FriendRequest.filter({
         to_user_id: me.email,
         status: 'pending'
       });
       setFriendRequests(pendingRequests);
 
       // Get notifications
-      const notifs = await base44.entities.Notification.filter({
+      const notifs = await api.entities.Notification.filter({
         user_id: me.email,
         is_read: false
       });
       setNotifications(notifs);
 
       // Get friends for chat - check both email and id
-      let profileData = await base44.entities.UserProfile.filter({ user_id: me.email });
+      let profileData = await api.entities.UserProfile.filter({ user_id: me.email });
       if (profileData.length === 0) {
-        profileData = await base44.entities.UserProfile.filter({ user_id: me.id });
+        profileData = await api.entities.UserProfile.filter({ user_id: me.id });
       }
 
       if (profileData.length > 0) {
         setMyProfile(profileData[0]);
         if (profileData[0].friends && profileData[0].friends.length > 0) {
-          const allUsers = await base44.entities.User.list();
+          const allUsers = await api.entities.User.list();
           const friendList = allUsers.filter(u => 
             profileData[0].friends.includes(u.email) || profileData[0].friends.includes(u.id)
           );
@@ -72,28 +72,28 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
 
   const acceptFriendRequest = async (request) => {
     // Update request status
-    await base44.entities.FriendRequest.update(request.id, { status: 'accepted' });
+    await api.entities.FriendRequest.update(request.id, { status: 'accepted' });
 
     // Add to both users' friends lists
-    const myProfiles = await base44.entities.UserProfile.filter({ user_id: currentUser.email });
-    const theirProfiles = await base44.entities.UserProfile.filter({ user_id: request.from_user_id });
+    const myProfiles = await api.entities.UserProfile.filter({ user_id: currentUser.email });
+    const theirProfiles = await api.entities.UserProfile.filter({ user_id: request.from_user_id });
 
     if (myProfiles.length > 0) {
       const myFriends = myProfiles[0].friends || [];
-      await base44.entities.UserProfile.update(myProfiles[0].id, {
+      await api.entities.UserProfile.update(myProfiles[0].id, {
         friends: [...myFriends, request.from_user_id]
       });
     }
 
     if (theirProfiles.length > 0) {
       const theirFriends = theirProfiles[0].friends || [];
-      await base44.entities.UserProfile.update(theirProfiles[0].id, {
+      await api.entities.UserProfile.update(theirProfiles[0].id, {
         friends: [...theirFriends, currentUser.email]
       });
     }
 
     // Send notification to the requester
-    await base44.entities.Notification.create({
+    await api.entities.Notification.create({
       user_id: request.from_user_id,
       type: 'friend_request',
       title: 'Friend Request Accepted',
@@ -106,7 +106,7 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
   };
 
   const rejectFriendRequest = async (request) => {
-    await base44.entities.FriendRequest.update(request.id, { status: 'rejected' });
+    await api.entities.FriendRequest.update(request.id, { status: 'rejected' });
     loadNotifications();
   };
 
@@ -324,7 +324,7 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
                     </Link>
                     <button
                       onClick={() => {
-                        base44.auth.logout();
+                        api.auth.logout();
                         setShowProfileMenu(false);
                       }}
                       className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-red-50 text-red-600 transition-colors"

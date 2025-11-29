@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
 import { Trophy, ArrowLeft, Users, Clock, Building2, Globe, Lock, Calendar } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
@@ -35,7 +35,7 @@ export default function CreateTournament() {
   }, []);
 
   const loadUser = async () => {
-    const currentUser = await base44.auth.me();
+    const currentUser = await api.auth.me();
     setUser(currentUser);
   };
 
@@ -58,7 +58,7 @@ export default function CreateTournament() {
     try {
       const tournamentId = generateTournamentId();
       
-      const tournament = await base44.entities.Tournament.create({
+      const tournament = await api.entities.Tournament.create({
         name: formData.name,
         tournament_id: tournamentId,
         type: tournamentType,

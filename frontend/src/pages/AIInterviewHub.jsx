@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { base44 } from '@/api/base44Client';
+import { api } from '@/api/apiClient';
+
 import { motion } from 'framer-motion';
 import { Bot, Plus, LogIn, Briefcase, Code, Heart, Brain, ArrowLeft, X, Users, Mic } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
@@ -29,7 +30,8 @@ export default function AIInterviewHub() {
   }, []);
 
   const loadUser = async () => {
-    const currentUser = await base44.auth.me();
+    const currentUser = await api.auth.me();
+
     setUser(currentUser);
   };
 
@@ -48,7 +50,8 @@ export default function AIInterviewHub() {
     setLoading(true);
     try {
       const roomCode = generateRoomCode();
-      const room = await base44.entities.AIInterview.create({
+      const room = await api.entities.AIInterview.create({
+
         room_code: roomCode,
         host_id: user.email,
         host_name: user.full_name,
@@ -80,7 +83,8 @@ export default function AIInterviewHub() {
 
     setLoading(true);
     try {
-      const rooms = await base44.entities.AIInterview.filter({ 
+      const rooms = await api.entities.AIInterview.filter({ 
+
         room_code: roomCode.toUpperCase(),
         status: { $in: ['lobby', 'active'] }
       });
@@ -102,7 +106,7 @@ export default function AIInterviewHub() {
           joined_at: new Date().toISOString()
         }];
 
-        await base44.entities.AIInterview.update(room.id, {
+        await api.entities.AIInterview.update(room.id, {
           participants: updatedParticipants
         });
       }

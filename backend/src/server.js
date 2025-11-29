@@ -19,6 +19,8 @@ const DebateRoom = require('./models/DebateRoom');
 const GDSession = require('./models/GDSession');
 const ExtemporeSession = require('./models/ExtemporeSession');
 const AIInterview = require('./models/AIInterview');
+const ChatMessage = require('./models/ChatMessage');
+const ExtemporeTopic = require('./models/ExtemporeTopic');
 
 const authRoutes = require('./routes/auth');
 
@@ -55,6 +57,8 @@ app.use('/api/debate-rooms', createCrudRouter(DebateRoom));
 app.use('/api/gd-sessions', createCrudRouter(GDSession));
 app.use('/api/extempore-sessions', createCrudRouter(ExtemporeSession));
 app.use('/api/ai-interviews', createCrudRouter(AIInterview));
+app.use('/api/chat-messages', createCrudRouter(ChatMessage));
+app.use('/api/extempore-topics', createCrudRouter(ExtemporeTopic));
 
 app.post('/api/friend-requests/:id/accept', async (req, res) => {
     const fr = await FriendRequest.findById(req.params.id);
@@ -82,7 +86,7 @@ app.post('/api/gd-rooms/:id/join', async (req, res) => {
     if (!room) return res.status(404).json({ message: 'Not found' });
     const exists = (room.participants || []).some(p => p.user_id === user_id);
     if (!exists) {
-        room.participants.push({ user_id, user_name });
+        room.participants.push({ user_id, name: user_name });
         await room.save();
     }
     res.json(room);
@@ -95,7 +99,8 @@ app.post('/api/debate-rooms/:id/join', async (req, res) => {
     if (!room) return res.status(404).json({ message: 'Not found' });
     const exists = (room.participants || []).some(p => p.user_id === user_id);
     if (!exists) {
-        room.participants.push({ user_id, user_name, side: side || 'neutral' });
+        const normSide = ['for','against','neutral'].includes(side) ? side : 'neutral';
+        room.participants.push({ user_id, name: user_name, side: normSide });
         await room.save();
     }
     res.json(room);
