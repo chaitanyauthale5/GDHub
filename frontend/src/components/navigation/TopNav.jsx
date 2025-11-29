@@ -19,7 +19,7 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
   const [myProfile, setMyProfile] = useState(null);
   const socket = useSocket();
 
-  const navItems = ['Dashboard', 'Explore', 'Progress', 'Leaderboard', 'About'];
+  const navItems = ['Home', 'Dashboard', 'Explore', 'Progress', 'Leaderboard', 'About'];
 
   useEffect(() => {
     loadNotifications();
@@ -175,8 +175,8 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
             {navItems.map((item) => (
               <Link
                 key={item}
-                to={createPageUrl(item)}
-                className={`px-6 py-2.5 rounded-full font-bold transition-all ${activePage === item
+                to={item === 'Home' ? '/' : createPageUrl(item)}
+                className={`px-6 py-2.5 rounded-full font-bold transition-all ${(item === 'Home' ? activePage === 'Landing' : activePage === item)
                     ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-xl'
                     : 'text-gray-700 hover:bg-gray-100'
                   }`}

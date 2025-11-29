@@ -37,9 +37,10 @@ import SoloPractice from './pages/SoloPractice';
 import TournamentHub from './pages/TournamentHub';
 import TournamentLobby from './pages/TournamentLobby';
 import UserProfile from './pages/UserProfile';
-
+import Landing from './pages/Landing';
 
 export const PAGES = {
+    "Landing": Landing,
     "Dashboard": Dashboard,
     "Explore": Explore,
     "GDModes": GDModes,
@@ -82,6 +83,6 @@ export const PAGES = {
 }
 
 export const pagesConfig = {
-    mainPage: "Dashboard",
+    mainPage: "Landing",
     Pages: PAGES,
 };
