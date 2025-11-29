@@ -1,7 +1,7 @@
 import useVapi from '@/hooks/useVapi';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, Bot, Edit3, Mic, MicOff } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TopNav from '../components/navigation/TopNav';
 import { createPageUrl } from '../utils';
@@ -15,6 +15,8 @@ export default function SoloPractice() {
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false);
+  
+  const chatEndRef = useRef(null);
   
   const {
     volumeLevel,
@@ -51,6 +53,10 @@ export default function SoloPractice() {
   useEffect(() => {
     setIsSpeaking(volumeLevel > 0.08);
   }, [volumeLevel]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [conversation]);
 
   const loadUser = async () => {
     try {
@@ -190,51 +196,32 @@ export default function SoloPractice() {
             </motion.div>
 
             {/* Conversation (from Vapi transcripts) */}
-            <div className="space-y-4 mb-6 max-h-[400px] overflow-y-auto">
-              {conversation.map((msg, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`rounded-2xl p-5 ${
-                    msg.role === 'user' 
-                      ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white ml-8' 
-                      : 'bg-white border-2 border-gray-100 shadow-lg mr-8'
-                  }`}
-                >
-                  {msg.role === 'user' ? (
-                    <p>{msg.content}</p>
-                  ) : (
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <Bot className="w-5 h-5 text-cyan-500" />
-                          <span className="font-bold text-cyan-600">AI Coach</span>
-                        </div>
-                        <div className="p-2 rounded-lg bg-gray-100 text-xs text-gray-600">
-                          Live voice via Vapi
-                        </div>
-                      </div>
-                      <p className="text-gray-800">{msg.content}</p>
-                    </div>
-                  )}
-                </motion.div>
-              ))}
-
-              {loading && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white rounded-2xl p-5 border-2 border-gray-100 shadow-lg mr-8">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-cyan-100 flex items-center justify-center">
-                      <Bot className="w-4 h-4 text-cyan-600 animate-pulse" />
-                    </div>
-                    <div className="flex gap-1">
-                      <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></span>
-                      <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></span>
-                      <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
-                    </div>
+            <div className="mb-6 h-[400px] overflow-y-auto">
+              <div className="rounded-3xl p-5 bg-white border-2 border-gray-100 shadow-inner text-sm text-gray-800 whitespace-pre-wrap">
+                {conversation.length === 0 && !loading && (
+                  <p className="text-gray-400">
+                    Your conversation transcript with the AI Coach will appear here.
+                  </p>
+                )}
+                {conversation.length > 0 && (
+                  conversation.map((msg, index) => (
+                    <p key={index} className="mb-2">
+                      <span className="font-semibold">
+                        {msg.role === 'ai' ? 'AI Coach' : 'You'}:
+                      </span>{' '}
+                      {msg.content}
+                    </p>
+                  ))
+                )}
+                {loading && (
+                  <div className="mt-2 flex gap-1">
+                    <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></span>
+                    <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></span>
+                    <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
                   </div>
-                </motion.div>
-              )}
+                )}
+                <div ref={chatEndRef} />
+              </div>
             </div>
 
             {/* Input Area with Vapi Voice */}
