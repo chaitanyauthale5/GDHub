@@ -7,15 +7,15 @@ import { createPageUrl } from '../../utils';
 import XPBadge from '../shared/XPBadge';
 
 export default function TopNav({ activePage = 'Dashboard', user }) {
-        const navigate = useNavigate();
-        const [showNotifications, setShowNotifications] = useState(false);
-        const [showChat, setShowChat] = useState(false);
-        const [showProfileMenu, setShowProfileMenu] = useState(false);
-        const [notifications, setNotifications] = useState([]);
-        const [friendRequests, setFriendRequests] = useState([]);
-        const [friends, setFriends] = useState([]);
-        const [currentUser, setCurrentUser] = useState(null);
-        const [myProfile, setMyProfile] = useState(null);
+  const navigate = useNavigate();
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [friendRequests, setFriendRequests] = useState([]);
+  const [friends, setFriends] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [myProfile, setMyProfile] = useState(null);
 
   const navItems = ['Dashboard', 'Explore', 'Progress', 'Leaderboard', 'About'];
 
@@ -63,7 +63,7 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
         setMyProfile(profileData[0]);
         if (profileData[0].friends && profileData[0].friends.length > 0) {
           const allUsers = await api.entities.User.list();
-          const friendList = allUsers.filter(u => 
+          const friendList = allUsers.filter(u =>
             profileData[0].friends.includes(u.email) || profileData[0].friends.includes(u.id)
           );
           setFriends(friendList);
@@ -160,11 +160,10 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
               <Link
                 key={item}
                 to={createPageUrl(item)}
-                className={`px-6 py-2.5 rounded-full font-bold transition-all ${
-                  activePage === item
+                className={`px-6 py-2.5 rounded-full font-bold transition-all ${activePage === item
                     ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-xl'
                     : 'text-gray-700 hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 {item}
               </Link>
@@ -176,7 +175,7 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
             <div className="hidden sm:block">
               <XPBadge xp={user?.xp_points || 0} level={user?.level || 1} />
             </div>
-            
+
             {/* Notifications */}
             <div className="relative">
               <button
@@ -200,7 +199,7 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
                     className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl p-4 shadow-2xl border border-gray-100 z-50 max-h-96 overflow-y-auto"
                   >
                     <h3 className="font-bold text-lg mb-3">Notifications</h3>
-                    
+
                     {/* Friend Requests */}
                     {friendRequests.length > 0 && (
                       <div className="mb-4">
@@ -359,9 +358,9 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
                 )}
               </AnimatePresence>
             </div>
-            </div>
-            </div>
-            </div>
-            </nav>
-            );
-            }
+          </div>
+        </div>
+      </div>
+    </nav>
+  );
+}

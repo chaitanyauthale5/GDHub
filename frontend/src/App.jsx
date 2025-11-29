@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext'
 import NavigationTracker from '@/lib/NavigationTracker'
 import { queryClientInstance } from '@/lib/query-client'
 import VisualEditAgent from '@/lib/VisualEditAgent'
+import { SocketProvider } from '@/lib/SocketContext'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { Route, BrowserRouter as Router, Routes, useLocation } from 'react-router-dom'
 import './App.css'
@@ -75,14 +76,16 @@ function App() {
 
   return (
     <AuthProvider>
-      <QueryClientProvider client={queryClientInstance}>
-        <Router>
-          <NavigationTracker />
-          <AuthenticatedApp />
-        </Router>
-        <Toaster />
-        <VisualEditAgent />
-      </QueryClientProvider>
+      <SocketProvider>
+        <QueryClientProvider client={queryClientInstance}>
+          <Router>
+            <NavigationTracker />
+            <AuthenticatedApp />
+          </Router>
+          <Toaster />
+          <VisualEditAgent />
+        </QueryClientProvider>
+      </SocketProvider>
     </AuthProvider>
   )
 }
