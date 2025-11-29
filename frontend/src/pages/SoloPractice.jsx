@@ -1,30 +1,32 @@
-import React, { useState, useEffect, useRef } from 'react';
+import useVapi from '@/hooks/useVapi';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ArrowLeft, Bot, Edit3, Mic, MicOff } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createPageUrl } from '../utils';
-import { api } from '@/api/apiClient';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Mic, MicOff, Sparkles, ArrowRight, RefreshCw, Volume2, VolumeX, Square, Play, Edit3, ArrowLeft } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
+import { createPageUrl } from '../utils';
 
 export default function SoloPractice() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [currentTopic, setCurrentTopic] = useState('');
   const [customTopic, setCustomTopic] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [conversation, setConversation] = useState([]);
-  const [userInput, setUserInput] = useState('');
-  const [transcript, setTranscript] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
-  const [sessionData, setSessionData] = useState({ messages: [], startTime: null });
-  const [aiMuted, setAiMuted] = useState(false);
-  const [autoMic, setAutoMic] = useState(true);
   
-  const recognitionRef = useRef(null);
-  const synthRef = useRef(window.speechSynthesis);
+  const {
+    volumeLevel,
+    isSessionActive,
+    conversation,
+    toggleCall,
+    stopCall,
+    resetConversation,
+  } = useVapi({
+    publicKey: import.meta.env.VITE_VAPI_PRACTICE_PUBLIC_KEY,
+    assistantId: import.meta.env.VITE_VAPI_PRACTICE_ASSISTANT_ID,
+  });
 
   const practiceTopics = [
     "Tell me about yourself and your career goals",
@@ -41,115 +43,34 @@ export default function SoloPractice() {
 
   useEffect(() => {
     loadUser();
-    initSpeechRecognition();
     return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      synthRef.current.cancel();
+      resetConversation();
     };
   }, []);
 
+  useEffect(() => {
+    setIsSpeaking(volumeLevel > 0.08);
+  }, [volumeLevel]);
+
   const loadUser = async () => {
     try {
-      const currentUser = await api.auth.me();
+      // auth.me is optional for this page; ignore failures
+      const currentUser = await import('@/api/apiClient').then(m => m.api.auth.me());
       setUser(currentUser);
     } catch (error) {
       console.error('Error loading user:', error);
     }
   };
 
-  const initSpeechRecognition = () => {
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      recognitionRef.current.lang = 'en-US';
-
-      recognitionRef.current.onresult = (event) => {
-        let finalTranscript = '';
-        let interimTranscript = '';
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript;
-          } else {
-            interimTranscript += transcript;
-          }
-        }
-
-        setTranscript(prev => prev + finalTranscript);
-        setUserInput(prev => prev + finalTranscript);
-      };
-
-      recognitionRef.current.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        setIsListening(false);
-      };
-
-      recognitionRef.current.onend = () => {
-        if (isListening) {
-          recognitionRef.current.start();
-        }
-      };
-    }
-  };
-
-  const toggleListening = () => {
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-    } else {
-      setTranscript('');
-      recognitionRef.current?.start();
-      setIsListening(true);
-    }
-  };
-
-  const speakText = (text) => {
-    if (aiMuted) {
-      // If muted, don't speak but still trigger auto-mic if enabled
-      if (autoMic && recognitionRef.current) {
-        setTranscript('');
-        recognitionRef.current.start();
-        setIsListening(true);
-      }
-      return;
-    }
-    
-    synthRef.current.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.9;
-    utterance.pitch = 1;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      // Auto-start mic when AI stops speaking if enabled
-      if (autoMic && recognitionRef.current) {
-        setTranscript('');
-        recognitionRef.current.start();
-        setIsListening(true);
-      }
-    };
-    synthRef.current.speak(utterance);
-  };
-
-  const stopSpeaking = () => {
-    synthRef.current.cancel();
-    setIsSpeaking(false);
-  };
-
   const selectTopic = (topic) => {
     setCurrentTopic(topic);
     setSessionStarted(true);
-    setSessionData({ messages: [], startTime: new Date() });
-    setConversation([]);
-    
-    const greeting = `Great choice! Let's discuss: "${topic}". Please share your thoughts on this topic. Take your time and speak naturally.`;
-    setConversation([{ role: 'ai', content: { feedback: greeting } }]);
-    speakText(greeting);
+    resetConversation();
+    try {
+      toggleCall();
+    } catch (e) {
+      console.error('Error starting Vapi practice session:', e);
+    }
   };
 
   const setCustomTopicAndStart = () => {
@@ -160,70 +81,18 @@ export default function SoloPractice() {
     }
   };
 
-  const getAIFeedback = async (userMessage) => {
-    if (!userMessage.trim()) return;
-    
-    setLoading(true);
-    const newConversation = [...conversation, { role: 'user', content: userMessage }];
-    setConversation(newConversation);
-    setUserInput('');
-
-    try {
-      const response = await api.integrations.Core.InvokeLLM({
-        prompt: `You are an expert communication coach helping someone practice their speaking skills in a real-time voice conversation.
-
-Topic: "${currentTopic}"
-User said: "${userMessage}"
-Conversation so far: ${JSON.stringify(newConversation.slice(-4))}
-
-Provide helpful feedback in JSON format:
-1. feedback: A brief, encouraging response (2-3 sentences). Be conversational like you're actually talking to them.
-2. tips: An array of 1-2 quick tips to improve (keep them short for voice)
-3. followUp: A follow-up question to keep the conversation going
-
-Keep responses concise as they will be spoken aloud.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            feedback: { type: "string" },
-            tips: { type: "array", items: { type: "string" } },
-            followUp: { type: "string" }
-          }
-        }
-      });
-
-      setConversation(prev => [...prev, { role: 'ai', content: response }]);
-      setSessionData(prev => ({
-        ...prev,
-        messages: [...prev.messages, { role: 'user', content: userMessage }, { role: 'ai', content: response }]
-      }));
-
-      // Speak the AI response
-      const spokenText = `${response.feedback} ${response.followUp}`;
-      speakText(spokenText);
-    } catch (error) {
-      console.error('Error getting AI feedback:', error);
-    }
-    setLoading(false);
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (userInput.trim()) {
-      // Stop listening when user sends response
-      if (isListening) {
-        recognitionRef.current?.stop();
-        setIsListening(false);
-      }
-      getAIFeedback(userInput);
-    }
-  };
-
   const endSession = async () => {
-    synthRef.current.cancel();
-    recognitionRef.current?.stop();
-    
-    navigate(createPageUrl(`SoloAnalysis?topic=${encodeURIComponent(currentTopic)}&messages=${encodeURIComponent(JSON.stringify(sessionData.messages))}`));
+    // Stop Vapi call if active
+    if (isSessionActive) {
+      try {
+        await stopCall();
+      } catch (e) {
+        console.error('Error stopping Vapi practice session:', e);
+      }
+    }
+
+    const messages = conversation.map(m => ({ role: m.role, content: m.content }));
+    navigate(createPageUrl(`SoloAnalysis?topic=${encodeURIComponent(currentTopic)}&messages=${encodeURIComponent(JSON.stringify(messages))}`));
   };
 
   return (
@@ -320,7 +189,7 @@ Keep responses concise as they will be spoken aloud.`,
               </div>
             </motion.div>
 
-            {/* Conversation */}
+            {/* Conversation (from Vapi transcripts) */}
             <div className="space-y-4 mb-6 max-h-[400px] overflow-y-auto">
               {conversation.map((msg, index) => (
                 <motion.div
@@ -342,36 +211,11 @@ Keep responses concise as they will be spoken aloud.`,
                           <Bot className="w-5 h-5 text-cyan-500" />
                           <span className="font-bold text-cyan-600">AI Coach</span>
                         </div>
-                        <button
-                          onClick={() => isSpeaking ? stopSpeaking() : speakText(`${msg.content.feedback} ${msg.content.followUp || ''}`)}
-                          className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200"
-                        >
-                          {isSpeaking ? <Square className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                        </button>
+                        <div className="p-2 rounded-lg bg-gray-100 text-xs text-gray-600">
+                          Live voice via Vapi
+                        </div>
                       </div>
-                      <p className="text-gray-800 mb-4">{msg.content.feedback}</p>
-                      
-                      {msg.content.tips && msg.content.tips.length > 0 && (
-                        <div className="bg-cyan-50 rounded-xl p-4 mb-4">
-                          <p className="font-bold text-cyan-700 mb-2 flex items-center gap-2">
-                            <Sparkles className="w-4 h-4" /> Quick Tips
-                          </p>
-                          <ul className="space-y-1">
-                            {msg.content.tips.map((tip, i) => (
-                              <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                                <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 mt-2 flex-shrink-0"></span>
-                                {tip}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      
-                      {msg.content.followUp && (
-                        <div className="bg-purple-50 rounded-xl p-4">
-                          <p className="text-gray-700 font-medium">{msg.content.followUp}</p>
-                        </div>
-                      )}
+                      <p className="text-gray-800">{msg.content}</p>
                     </div>
                   )}
                 </motion.div>
@@ -393,74 +237,24 @@ Keep responses concise as they will be spoken aloud.`,
               )}
             </div>
 
-            {/* Input Area with Voice */}
+            {/* Input Area with Vapi Voice */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-3xl p-4 shadow-xl border-2 border-gray-100 sticky bottom-4">
-              <form onSubmit={handleSubmit} className="flex gap-3">
+              <div className="flex items-center gap-4">
                 <button
                   type="button"
-                  onClick={toggleListening}
+                  onClick={toggleCall}
                   className={`p-4 rounded-2xl font-bold transition-all flex-shrink-0 ${
-                    isListening 
+                    isSessionActive 
                       ? 'bg-red-500 text-white animate-pulse' 
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  {isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+                  {isSessionActive ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
                 </button>
-                <input
-                  type="text"
-                  value={userInput}
-                  onChange={(e) => setUserInput(e.target.value)}
-                  placeholder={isListening ? "Listening..." : "Type or speak your response..."}
-                  className="flex-1 px-5 py-4 rounded-2xl bg-gray-50 border-2 border-gray-200 focus:border-cyan-400 focus:outline-none text-gray-800 font-medium"
-                />
-                <button
-                  type="submit"
-                  disabled={!userInput.trim() || loading}
-                  className="px-6 py-4 rounded-2xl bg-gradient-to-r from-cyan-400 to-teal-500 text-white font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
-                >
-                  <ArrowRight className="w-5 h-5" />
-                </button>
-              </form>
-              
-              {/* Controls Row */}
-              <div className="flex items-center justify-between mt-3 px-2">
-                <div className="flex items-center gap-4">
-                  {/* Auto Mic Checkbox */}
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoMic}
-                      onChange={(e) => setAutoMic(e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-300 text-cyan-500 focus:ring-cyan-500"
-                    />
-                    <span className="text-xs text-gray-600 font-medium">Auto Mic</span>
-                  </label>
-                  
-                  {/* Mute AI Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAiMuted(!aiMuted);
-                      if (!aiMuted) {
-                        synthRef.current.cancel();
-                        setIsSpeaking(false);
-                      }
-                    }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      aiMuted 
-                        ? 'bg-orange-100 text-orange-600' 
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {aiMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                    {aiMuted ? 'AI Muted' : 'Mute AI'}
-                  </button>
+                <div className="flex-1">
+                  <p className="text-sm text-gray-700 font-medium">Talk with your AI Voice Coach</p>
+                  <p className="text-xs text-gray-500">Use your microphone to practice speaking. Transcripts will appear above.</p>
                 </div>
-                
-                <p className="text-xs text-gray-500">
-                  {isListening ? '🎤 Listening...' : autoMic ? 'Auto mic when AI stops' : 'Click mic to speak'}
-                </p>
               </div>
             </motion.div>
           </>
