@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import { api } from '@/api/apiClient';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { api } from '@/api/apiClient';
 
 import { motion } from 'framer-motion';
-import { User, Flame, ArrowLeft, UserPlus, Check, MessageCircle, Mail } from 'lucide-react';
+import { ArrowLeft, Check, Flame, Mail, MessageCircle, UserPlus } from 'lucide-react';
 
+import { useSocket } from '@/lib/SocketContext';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
 
@@ -20,6 +21,7 @@ export default function UserProfile() {
   const [isFriend, setIsFriend] = useState(false);
   const [friendRequestSent, setFriendRequestSent] = useState(false);
   const [loading, setLoading] = useState(true);
+  const socket = useSocket();
 
   useEffect(() => {
     loadData();
@@ -113,16 +115,16 @@ export default function UserProfile() {
       return;
     }
 
-    await api.entities.FriendRequest.create({
+    const friendReq = await api.entities.FriendRequest.create({
       from_user_id: currentUser.email,
       from_user_name: currentUser.full_name,
       to_user_id: viewedUser.email,
       message: `${currentUser.full_name} wants to be your friend`,
       status: 'pending'
     });
-
+    
     // Create notification
-    await api.entities.Notification.create({
+    const notif = await api.entities.Notification.create({
       user_id: viewedUser.email,
       type: 'friend_request',
       title: 'New Friend Request',
@@ -131,11 +133,22 @@ export default function UserProfile() {
       is_read: false
     });
 
+    if (socket) {
+      socket.emit('friend_request_notification', {
+        to_user_id: viewedUser.email,
+        from_user_id: currentUser.email,
+        from_user_name: currentUser.full_name,
+        notification: notif,
+        friend_request: friendReq,
+      });
+    }
+
     setFriendRequestSent(true);
   };
 
   const startChat = () => {
-    navigate(createPageUrl(`Chat?friendId=${userId}`));
+    const targetId = viewedUser?.email || userId;
+    navigate(createPageUrl('Chat', { friendId: targetId }));
   };
 
   if (loading) {

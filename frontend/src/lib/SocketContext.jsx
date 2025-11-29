@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import io from 'socket.io-client';
 import { useAuth } from './AuthContext';
 
@@ -27,6 +27,9 @@ export const SocketProvider = ({ children }) => {
 
             newSocket.on('connect', () => {
                 console.log('Socket connected:', newSocket.id);
+                if (user?.email) {
+                    newSocket.emit('register_user', user.email);
+                }
             });
 
             return () => {

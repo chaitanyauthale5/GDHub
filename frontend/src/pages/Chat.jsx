@@ -1,14 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useSocket } from '@/lib/SocketContext';
-import { useNavigate } from 'react-router-dom';
-import { createPageUrl } from '../utils';
 import { api } from '@/api/apiClient';
+import { useSocket } from '@/lib/SocketContext';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { Input } from '@/components/ui/input';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Send, User } from 'lucide-react';
+import { ArrowLeft, Send } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
-import { Input } from '@/components/ui/input';
 
 export default function Chat() {
   const navigate = useNavigate();
@@ -17,6 +16,7 @@ export default function Chat() {
 
   const [user, setUser] = useState(null);
   const [friend, setFriend] = useState(null);
+  const [friendKey, setFriendKey] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -30,22 +30,22 @@ export default function Chat() {
   }, [friendId]);
 
   useEffect(() => {
-    if (!socket || !friendId || !user) return;
+    if (!socket || !user || !friendKey) return;
 
     // Create a unique room ID for the pair (e.g., sorted user IDs)
-    const roomId = [user.email, friendId].sort().join('_');
+    const roomId = [user.email, friendKey].sort().join('_');
     socket.emit('join_room', roomId);
 
     const handleReceiveMessage = (newMessage) => {
       // Only append if it belongs to this conversation
       if (
-        (newMessage.from_user_id === friendId && newMessage.to_user_id === user.email) ||
-        (newMessage.from_user_id === user.email && newMessage.to_user_id === friendId)
+        (newMessage.from_user_id === friendKey && newMessage.to_user_id === user.email) ||
+        (newMessage.from_user_id === user.email && newMessage.to_user_id === friendKey)
       ) {
         setMessages((prev) => [...prev, newMessage]);
 
         // Mark as read if it's from friend
-        if (newMessage.from_user_id === friendId) {
+        if (newMessage.from_user_id === friendKey) {
           api.entities.ChatMessage.update(newMessage.id, { is_read: true }).catch(console.error);
         }
       }
@@ -56,7 +56,7 @@ export default function Chat() {
     return () => {
       socket.off('receive_message', handleReceiveMessage);
     };
-  }, [socket, friendId, user]);
+  }, [socket, user, friendKey]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -73,7 +73,10 @@ export default function Chat() {
       const friendUser = allUsers.find(u => u.id === friendId || u.email === friendId);
       setFriend(friendUser);
 
-      await loadMessages();
+      const peerId = friendUser?.email || friendId;
+      setFriendKey(peerId);
+
+      await loadMessages(currentUser, peerId);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -81,18 +84,16 @@ export default function Chat() {
     }
   };
 
-  const loadMessages = async () => {
-    if (!friendId) return;
+  const loadMessages = async (currentUser, peerId) => {
+    if (!peerId || !currentUser) return;
 
     try {
-      const currentUser = await api.auth.me();
-
       // Get messages between the two users
       const allMessages = await api.entities.ChatMessage.list('-created_date', 100);
 
       const conversation = allMessages.filter(m =>
-        (m.from_user_id === currentUser.email && m.to_user_id === friendId) ||
-        (m.from_user_id === friendId && m.to_user_id === currentUser.email)
+        (m.from_user_id === currentUser.email && m.to_user_id === peerId) ||
+        (m.from_user_id === peerId && m.to_user_id === currentUser.email)
       ).reverse();
 
       setMessages(conversation);
@@ -103,7 +104,6 @@ export default function Chat() {
       );
       for (const msg of unreadMessages) {
         await api.entities.ChatMessage.update(msg.id, { is_read: true });
-
       }
     } catch (error) {
       console.error('Error loading messages:', error);
@@ -113,10 +113,12 @@ export default function Chat() {
   const sendMessage = async () => {
     if (!inputMessage.trim() || !user || !friend) return;
 
+    const peerId = friendKey || friend.email || friendId;
+
     const msgData = {
       from_user_id: user.email,
       from_user_name: user.full_name,
-      to_user_id: friend.email,
+      to_user_id: peerId,
       message: inputMessage,
       is_read: false
     };
@@ -128,11 +130,11 @@ export default function Chat() {
       const savedMsg = await api.entities.ChatMessage.create(msgData);
 
       if (socket) {
-        const roomId = [user.email, friendId].sort().join('_');
+        const roomId = [user.email, peerId].sort().join('_');
         socket.emit('send_message', { ...savedMsg, room: roomId });
       } else {
         // Fallback if socket fails
-        await loadMessages();
+        await loadMessages(user, peerId);
       }
 
       setInputMessage('');
@@ -149,9 +151,13 @@ export default function Chat() {
     );
   }
 
+  const displayEmail = friend?.email || friendKey || friendId || '';
+  const displayName = friend?.full_name || (displayEmail ? displayEmail.split('@')[0] : 'Unknown');
+  const avatarInitial = (friend?.full_name || displayName || 'U').charAt(0).toUpperCase();
+
   return (
     <div className="min-h-screen pb-20">
-      <TopNav activePage="Dashboard" />
+      <TopNav activePage="Dashboard" user={user} />
 
       <div className="max-w-3xl mx-auto px-4 pt-24">
         {/* Header */}
@@ -164,11 +170,11 @@ export default function Chat() {
           </button>
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold">
-              {friend?.full_name?.charAt(0) || 'U'}
+              {avatarInitial}
             </div>
             <div>
-              <h2 className="font-bold text-lg">{friend?.full_name || 'Unknown'}</h2>
-              <p className="text-sm text-gray-500">{friend?.email}</p>
+              <h2 className="font-bold text-lg">{displayName}</h2>
+              <p className="text-sm text-gray-500">{displayEmail}</p>
             </div>
           </div>
         </div>

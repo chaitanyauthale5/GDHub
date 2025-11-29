@@ -149,6 +149,19 @@ const start = async () => {
             console.log(`User ${socket.id} joined room ${room}`);
         });
 
+        socket.on('register_user', (userId) => {
+            if (!userId) return;
+            const roomName = `user:${userId}`;
+            socket.join(roomName);
+            console.log(`User ${socket.id} registered room ${roomName}`);
+        });
+
+        socket.on('friend_request_notification', (payload) => {
+            if (!payload || !payload.to_user_id) return;
+            const roomName = `user:${payload.to_user_id}`;
+            io.to(roomName).emit('friend_request_notification', payload);
+        });
+
         socket.on('send_message', (data) => {
             // data: { room, message, from_user_id, ... }
             // Broadcast to everyone in the room INCLUDING sender (or exclude if handled optimistically on client)

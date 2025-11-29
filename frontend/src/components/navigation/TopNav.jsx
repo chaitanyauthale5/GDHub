@@ -1,4 +1,5 @@
 import { api } from '@/api/apiClient';
+import { useSocket } from '@/lib/SocketContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Bell, Check, LogOut, MessageCircle, User, UserPlus, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -16,6 +17,7 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
   const [friends, setFriends] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [myProfile, setMyProfile] = useState(null);
+  const socket = useSocket();
 
   const navItems = ['Dashboard', 'Explore', 'Progress', 'Leaderboard', 'About'];
 
@@ -24,6 +26,20 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
     const interval = setInterval(loadNotifications, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!socket || !currentUser) return;
+
+    const handleFriendRequestNotification = () => {
+      loadNotifications();
+    };
+
+    socket.on('friend_request_notification', handleFriendRequestNotification);
+
+    return () => {
+      socket.off('friend_request_notification', handleFriendRequestNotification);
+    };
+  }, [socket, currentUser]);
 
   const loadNotifications = async () => {
     try {
@@ -123,7 +139,7 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
   };
 
   const openChat = (friendId) => {
-    navigate(createPageUrl(`Chat?friendId=${friendId}`));
+    navigate(createPageUrl('Chat', { friendId }));
     setShowChat(false);
   };
 
