@@ -22,7 +22,9 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin } = useAuth();
   const location = useLocation();
-  const isAuthPage = location.pathname === '/Login' || location.pathname === '/Register';
+  const pathname = location.pathname;
+  const p = pathname?.toLowerCase?.() || pathname;
+  const isPublicPage = p === '/' || p === '/about' || p === '/login' || p === '/register';
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
@@ -38,12 +40,11 @@ const AuthenticatedApp = () => {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else if (authError.type === 'auth_required') {
-      if (!isAuthPage) {
-        // Redirect to login automatically when not already on an auth page
+      if (!isPublicPage) {
         navigateToLogin();
         return null;
       }
-      // If we're already on /Login or /Register, allow the route to render below
+      // allow public pages without redirect
     }
   }
 

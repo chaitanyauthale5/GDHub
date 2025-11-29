@@ -1,11 +1,13 @@
 import { api } from '@/api/apiClient';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Award, Camera, Crown, LogOut, Mail, TrendingUp, Users, UserPlus, Search, X } from 'lucide-react';
+import { Award, Camera, Crown, LogOut, Mail, TrendingUp, Users, UserPlus, Search, X, MessageCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import TopNav from '../components/navigation/TopNav';
 import AvatarSelector from '../components/shared/AvatarSelector';
 import ClayCard from '../components/shared/ClayCard';
 import XPBadge from '../components/shared/XPBadge';
+import { createPageUrl } from '../utils';
 
 export default function Profile() {
   const [user, setUser] = useState(null);
@@ -15,6 +17,7 @@ export default function Profile() {
   const [friendSearch, setFriendSearch] = useState('');
   const [friendSearchResult, setFriendSearchResult] = useState(null);
   const [friendBusy, setFriendBusy] = useState(false);
+  const [allUsers, setAllUsers] = useState([]);
 
   useEffect(() => {
     loadData();
@@ -23,6 +26,7 @@ export default function Profile() {
   const loadData = async () => {
     try {
       const currentUser = await api.auth.me();
+
       if (!currentUser) {
         setUser(null);
         setProfile(null);
@@ -50,6 +54,10 @@ export default function Profile() {
         5
       );
       setRecentSessions([...gdSessions, ...extemporeSessions].slice(0, 5));
+
+      // Load all users for friend name mapping and global search
+      const users = await api.entities.User.list();
+      setAllUsers(users);
     } catch (error) {
       console.error('Error loading data:', error);
     }
@@ -70,11 +78,18 @@ export default function Profile() {
     if (!friendSearch.trim()) return;
     setFriendBusy(true);
     try {
-      let res = await api.entities.User.filter({ id: friendSearch.trim() });
-      if (res.length === 0) {
-        res = await api.entities.User.filter({ email: friendSearch.trim() });
+      const q = friendSearch.trim().toLowerCase();
+      let users = allUsers;
+      if (!users || users.length === 0) {
+        users = await api.entities.User.list();
+        setAllUsers(users);
       }
-      setFriendSearchResult(res[0] || null);
+      const results = (users || []).filter(u => {
+        const email = (u.email || '').toLowerCase();
+        const name = (u.full_name || '').toLowerCase();
+        return u.id === friendSearch.trim() || email === q || email.includes(q) || name.includes(q);
+      });
+      setFriendSearchResult(results[0] || null);
     } finally {
       setFriendBusy(false);
     }
@@ -215,7 +230,7 @@ export default function Profile() {
           <div className="flex flex-col md:flex-row gap-3 mb-4">
             <div className="flex-1 flex items-center gap-2">
               <Search className="w-5 h-5 text-gray-500" />
-              <input value={friendSearch} onChange={e => setFriendSearch(e.target.value)} placeholder="Enter user id or email" className="flex-1 px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-400" />
+              <input value={friendSearch} onChange={e => setFriendSearch(e.target.value)} placeholder="Search by name or email" className="flex-1 px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-400" />
             </div>
             <button onClick={searchFriend} disabled={friendBusy || !friendSearch.trim()} className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold">
               Search
@@ -237,15 +252,28 @@ export default function Profile() {
             <h3 className="font-bold mb-2">Your Friends</h3>
             {(profile?.friends && profile.friends.length > 0) ? (
               <div className="space-y-2">
-                {profile.friends.map(fid => (
-                  <div key={fid} className="flex items-center justify-between p-3 rounded-xl bg-white/60 border">
-                    <span className="font-medium">{fid}</span>
-                    <button onClick={() => removeFriend(fid)} className="px-3 py-2 rounded-xl bg-red-500 text-white font-bold flex items-center gap-2">
-                      <X className="w-4 h-4" />
-                      Remove
-                    </button>
-                  </div>
-                ))}
+                {profile.friends.map(fid => {
+                  const friendUser = (allUsers || []).find(u => u.email === fid || u.id === fid);
+                  const displayName = friendUser?.full_name || 'User';
+                  const displayEmail = friendUser?.email || fid;
+                  return (
+                    <div key={fid} className="flex items-center justify-between p-3 rounded-xl bg-white/60 border">
+                      <div className="flex items-center gap-3">
+                        <Link to={createPageUrl('Chat', { friendId: fid })} className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200" title="Message">
+                          <MessageCircle className="w-5 h-5 text-gray-700" />
+                        </Link>
+                        <div>
+                          <p className="font-semibold leading-tight">{displayName}</p>
+                          <p className="text-xs text-gray-500">{displayEmail}</p>
+                        </div>
+                      </div>
+                      <button onClick={() => removeFriend(fid)} className="px-3 py-2 rounded-xl bg-red-500 text-white font-bold flex items-center gap-2">
+                        <X className="w-4 h-4" />
+                        Remove
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <p className="text-sm text-gray-500">No friends yet</p>

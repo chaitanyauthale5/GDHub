@@ -46,6 +46,18 @@ export default function Landing() {
               >
                 Explore Features
               </Link>
+              <Link
+                to={createPageUrl('Login')}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gray-900 text-white font-bold hover:bg-black"
+              >
+                Log in
+              </Link>
+              <Link
+                to={createPageUrl('Register')}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold shadow"
+              >
+                Sign up
+              </Link>
             </div>
           </motion.div>
 
