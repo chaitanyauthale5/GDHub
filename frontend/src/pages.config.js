@@ -27,9 +27,11 @@ import JoinDebateRoom from './pages/JoinDebateRoom';
 import JoinRoom from './pages/JoinRoom';
 import Leaderboard from './pages/Leaderboard';
 import Lobby from './pages/Lobby';
+import Login from './pages/Login';
 import PostGDFeedback from './pages/PostGDFeedback';
 import Profile from './pages/Profile';
 import Progress from './pages/Progress';
+import Register from './pages/Register';
 import SoloAnalysis from './pages/SoloAnalysis';
 import SoloPractice from './pages/SoloPractice';
 import TournamentHub from './pages/TournamentHub';
@@ -75,6 +77,8 @@ export const PAGES = {
     "UserProfile": UserProfile,
     "Chat": Chat,
     "Progress": Progress,
+    "Login": Login,
+    "Register": Register,
 }
 
 export const pagesConfig = {

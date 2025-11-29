@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { api } from '@/api/apiClient';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Bell, Check, LogOut, MessageCircle, User, UserPlus, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../../utils';
-import { Bell, MessageCircle, User, LogOut, Info, Check, X, UserPlus } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { api } from '@/api/apiClient';
 import XPBadge from '../shared/XPBadge';
-import { AVATARS } from '../shared/AvatarSelector';
 
 export default function TopNav({ activePage = 'Dashboard', user }) {
         const navigate = useNavigate();
@@ -29,6 +28,14 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
   const loadNotifications = async () => {
     try {
       const me = await api.auth.me();
+      if (!me) {
+        setCurrentUser(null);
+        setFriendRequests([]);
+        setNotifications([]);
+        setFriends([]);
+        return;
+      }
+
       setCurrentUser(me);
 
       // Get pending friend requests

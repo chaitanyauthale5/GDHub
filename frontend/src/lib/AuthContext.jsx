@@ -38,9 +38,20 @@ export const AuthProvider = ({ children }) => {
       // Now check if the user is authenticated
       setIsLoadingAuth(true);
       const currentUser = await api.auth.me();
-      setUser(currentUser);
-      setIsAuthenticated(true);
-      setIsLoadingAuth(false);
+      if (currentUser) {
+        setUser(currentUser);
+        setIsAuthenticated(true);
+        setIsLoadingAuth(false);
+      } else {
+        // Not logged in
+        setUser(null);
+        setIsAuthenticated(false);
+        setAuthError({
+          type: 'auth_required',
+          message: 'Authentication required'
+        });
+        setIsLoadingAuth(false);
+      }
     } catch (error) {
       console.error('User auth check failed:', error);
       setIsLoadingAuth(false);
@@ -70,8 +81,12 @@ export const AuthProvider = ({ children }) => {
   };
 
   const navigateToLogin = () => {
+    // Avoid redirect loops: if we're already on Login or Register, do nothing
+    const path = window.location?.pathname || '';
+    if (path === '/Login' || path === '/Register') return;
+
     // Use the SDK's redirectToLogin method
-    api.auth.redirectToLogin(window.location.href);
+    api.auth.redirectToLogin();
   };
 
   return (

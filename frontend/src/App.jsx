@@ -1,14 +1,14 @@
-import './App.css'
 import { Toaster } from "@/components/ui/toaster"
-import { QueryClientProvider } from '@tanstack/react-query'
+import UserNotRegisteredError from '@/components/UserNotRegisteredError'
+import { AuthProvider, useAuth } from '@/lib/AuthContext'
+import NavigationTracker from '@/lib/NavigationTracker'
 import { queryClientInstance } from '@/lib/query-client'
 import VisualEditAgent from '@/lib/VisualEditAgent'
-import NavigationTracker from '@/lib/NavigationTracker'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { Route, BrowserRouter as Router, Routes, useLocation } from 'react-router-dom'
+import './App.css'
+import PageNotFound from './lib/PageNotFound'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import PageNotFound from './lib/PageNotFound';
-import { AuthProvider, useAuth } from '@/lib/AuthContext';
-import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -20,6 +20,8 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin } = useAuth();
+  const location = useLocation();
+  const isAuthPage = location.pathname === '/Login' || location.pathname === '/Register';
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
@@ -35,9 +37,12 @@ const AuthenticatedApp = () => {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else if (authError.type === 'auth_required') {
-      // Redirect to login automatically
-      navigateToLogin();
-      return null;
+      if (!isAuthPage) {
+        // Redirect to login automatically when not already on an auth page
+        navigateToLogin();
+        return null;
+      }
+      // If we're already on /Login or /Register, allow the route to render below
     }
   }
 

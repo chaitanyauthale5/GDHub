@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
 import { api } from '@/api/apiClient';
-import { motion, AnimatePresence } from 'framer-motion';
-import { User, Mail, Award, TrendingUp, Users, LogOut, Crown, Camera } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Award, Camera, Crown, LogOut, Mail, TrendingUp, Users } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import TopNav from '../components/navigation/TopNav';
+import AvatarSelector from '../components/shared/AvatarSelector';
 import ClayCard from '../components/shared/ClayCard';
 import XPBadge from '../components/shared/XPBadge';
-import AvatarSelector from '../components/shared/AvatarSelector';
 
 export default function Profile() {
   const [user, setUser] = useState(null);
@@ -20,6 +20,13 @@ export default function Profile() {
   const loadData = async () => {
     try {
       const currentUser = await api.auth.me();
+      if (!currentUser) {
+        setUser(null);
+        setProfile(null);
+        setRecentSessions([]);
+        return;
+      }
+
       setUser(currentUser);
 
       const profiles = await api.entities.UserProfile.filter({ user_id: currentUser.id });

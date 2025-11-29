@@ -6,13 +6,26 @@ const jsonHeaders = { 'Content-Type': 'application/json' };
 
 const safeJson = async (resp) => { try { return await resp.json(); } catch { return null; } };
 
+/**
+ * Makes a request to the API.
+ * 
+ * @param {string} method - The HTTP method to use.
+ * @param {string} path - The path to the API endpoint.
+ * @param {object} [body] - The request body.
+ * @param {object} [headers] - Additional headers to include in the request.
+ * @returns {Promise<object>} The response data.
+ */
 async function request(method, path, body, headers = {}) {
-  const init = { method, headers: { ...jsonHeaders, ...headers } };
+  /** @type {RequestInit} */
+  const init = { method, headers: { ...jsonHeaders, ...headers }, credentials: 'include' };
   if (body !== undefined) init.body = JSON.stringify(body);
   const resp = await fetch(`${API_BASE_URL}${path}`, init);
   if (!resp.ok) {
     const msg = await safeJson(resp);
-    throw new Error(msg?.message || `Request failed: ${resp.status}`);
+    const error = new Error(msg?.message || `Request failed: ${resp.status}`);
+    // Attach status so callers can distinguish 401, 403, etc.
+    error.status = resp.status;
+    throw error;
   }
   return await safeJson(resp);
 }
@@ -100,19 +113,40 @@ function ensureGuest() {
   try {
     const existing = localStorage.getItem('app_guest_user');
     if (existing) return JSON.parse(existing);
-  } catch {}
+  } catch { }
   const guest = { id: 'guest', email: 'guest@example.com', full_name: 'Guest User' };
-  try { localStorage.setItem('app_guest_user', JSON.stringify(guest)); } catch {}
+  try { localStorage.setItem('app_guest_user', JSON.stringify(guest)); } catch { }
   return guest;
 }
 
 const auth = {
-  async me() { return ensureGuest(); },
-  logout(redirectUrl) {
-    try { localStorage.removeItem('app_guest_user'); } catch {}
+  async me() {
+    try {
+      return await get('/api/auth/me');
+    } catch (error) {
+      // If not logged in, backend returns 401. Represent this as null instead of throwing.
+      if (error && error.status === 401) return null;
+      throw error;
+    }
+  },
+  async login({ email, password }) {
+    return post('/api/auth/login', { email, password });
+  },
+  async register({ email, password, full_name }) {
+    return post('/api/auth/register', { email, password, full_name });
+  },
+  async logout(redirectUrl) {
+    try {
+      await post('/api/auth/logout', {});
+    } catch {
+      // ignore logout errors
+    }
+    try { localStorage.removeItem('app_guest_user'); } catch { }
     if (redirectUrl) window.location.href = redirectUrl;
   },
-  redirectToLogin(url) { if (url) window.location.href = url; },
+  redirectToLogin() {
+    window.location.href = '/Login';
+  },
 };
 
 const appLogs = {
@@ -122,7 +156,7 @@ const appLogs = {
       const logs = JSON.parse(localStorage.getItem(key) || '[]');
       logs.push({ page: pageName, ts: Date.now() });
       localStorage.setItem(key, JSON.stringify(logs));
-    } catch {}
+    } catch { }
     return { success: true };
   },
 };
