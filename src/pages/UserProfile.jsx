@@ -1,0 +1,247 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '../utils';
+import { base44 } from '@/api/base44Client';
+import { motion } from 'framer-motion';
+import { User, Flame, ArrowLeft, UserPlus, Check, MessageCircle } from 'lucide-react';
+import TopNav from '../components/navigation/TopNav';
+import ClayCard from '../components/shared/ClayCard';
+
+export default function UserProfile() {
+  const navigate = useNavigate();
+  const urlParams = new URLSearchParams(window.location.search);
+  const userId = urlParams.get('userId');
+  
+  const [currentUser, setCurrentUser] = useState(null);
+  const [viewedUser, setViewedUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [isFriend, setIsFriend] = useState(false);
+  const [friendRequestSent, setFriendRequestSent] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadData();
+  }, [userId]);
+
+  const loadData = async () => {
+    try {
+      const me = await base44.auth.me();
+      setCurrentUser(me);
+
+      // Get all users
+      const allUsers = await base44.entities.User.list();
+      
+      // Find target user - try multiple matching strategies
+      let targetUser = allUsers.find(u => u.id === userId);
+      if (!targetUser) {
+        targetUser = allUsers.find(u => u.email === userId);
+      }
+      
+      // If still not found, the userId might be the profile's user_id
+      if (!targetUser) {
+        // Get all profiles and find the one matching
+        const allProfiles = await base44.entities.UserProfile.list();
+        const matchingProfile = allProfiles.find(p => p.user_id === userId);
+        if (matchingProfile) {
+          targetUser = allUsers.find(u => u.email === matchingProfile.user_id || u.id === matchingProfile.user_id);
+          setProfile(matchingProfile);
+        }
+      }
+      
+      setViewedUser(targetUser);
+
+      if (targetUser) {
+        // Get profile if not already found
+        if (!profile) {
+          let profiles = await base44.entities.UserProfile.filter({ user_id: targetUser.email });
+          if (profiles.length === 0) {
+            profiles = await base44.entities.UserProfile.filter({ user_id: targetUser.id });
+          }
+          
+          if (profiles.length > 0) {
+            setProfile(profiles[0]);
+          }
+        }
+
+        // Check if already friends - check my profile
+        let myProfiles = await base44.entities.UserProfile.filter({ user_id: me.email });
+        if (myProfiles.length === 0) {
+          myProfiles = await base44.entities.UserProfile.filter({ user_id: me.id });
+        }
+        
+        if (myProfiles.length > 0 && myProfiles[0].friends) {
+          if (myProfiles[0].friends.includes(targetUser.email) || myProfiles[0].friends.includes(targetUser.id)) {
+            setIsFriend(true);
+          }
+        }
+
+        // Check if friend request already sent
+        const existingRequests = await base44.entities.FriendRequest.filter({
+          from_user_id: me.email,
+          to_user_id: targetUser.email,
+          status: 'pending'
+        });
+        if (existingRequests.length > 0) {
+          setFriendRequestSent(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sendFriendRequest = async () => {
+    if (!currentUser || !viewedUser) return;
+
+    // Double check if already friends
+    if (isFriend) {
+      alert('You are already friends!');
+      return;
+    }
+
+    await base44.entities.FriendRequest.create({
+      from_user_id: currentUser.email,
+      from_user_name: currentUser.full_name,
+      to_user_id: viewedUser.email,
+      to_user_name: viewedUser.full_name,
+      status: 'pending'
+    });
+
+    // Create notification
+    await base44.entities.Notification.create({
+      user_id: viewedUser.email,
+      type: 'friend_request',
+      title: 'New Friend Request',
+      message: `${currentUser.full_name} sent you a friend request`,
+      from_user_id: currentUser.email,
+      is_read: false
+    });
+
+    setFriendRequestSent(true);
+  };
+
+  const startChat = () => {
+    navigate(createPageUrl(`Chat?friendId=${userId}`));
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  if (!viewedUser) {
+    return (
+      <div className="min-h-screen pb-20">
+        <TopNav activePage="Leaderboard" />
+        <div className="max-w-4xl mx-auto px-6 pt-28 text-center">
+          <h1 className="text-2xl font-bold text-gray-700">User not found</h1>
+          <button
+            onClick={() => navigate(-1)}
+            className="mt-4 px-6 py-2 rounded-xl bg-purple-500 text-white font-bold"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen pb-20">
+      <TopNav activePage="Leaderboard" />
+      
+      <div className="max-w-4xl mx-auto px-6 pt-28">
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-medium mb-6"
+        >
+          <ArrowLeft className="w-5 h-5" />
+          Back
+        </button>
+
+        {/* Profile Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <ClayCard className="mb-6">
+            <div className="flex flex-col md:flex-row items-center gap-6">
+              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-4xl font-bold shadow-xl">
+                {viewedUser.full_name?.charAt(0) || 'U'}
+              </div>
+              <div className="flex-1 text-center md:text-left">
+                <h1 className="text-3xl font-black">{viewedUser.full_name}</h1>
+                <p className="text-gray-600 flex items-center justify-center md:justify-start gap-2 mt-1">
+                  <Mail className="w-4 h-4" />
+                  {viewedUser.email}
+                </p>
+                <div className="flex items-center justify-center md:justify-start gap-4 mt-3">
+                  <span className="px-3 py-1 rounded-full bg-purple-100 text-purple-700 font-bold text-sm">
+                    Level {profile?.level || 1}
+                  </span>
+                  <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-700 font-bold text-sm">
+                    {profile?.xp_points || 0} XP
+                  </span>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                {isFriend ? (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={startChat}
+                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-green-400 to-teal-500 text-white font-bold flex items-center gap-2"
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                    Message
+                  </motion.button>
+                ) : friendRequestSent ? (
+                  <div className="px-6 py-3 rounded-xl bg-gray-200 text-gray-600 font-bold flex items-center gap-2">
+                    <Check className="w-5 h-5" />
+                    Request Sent
+                  </div>
+                ) : (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={sendFriendRequest}
+                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold flex items-center gap-2"
+                  >
+                    <UserPlus className="w-5 h-5" />
+                    Add Friend
+                  </motion.button>
+                )}
+              </div>
+            </div>
+          </ClayCard>
+        </motion.div>
+
+        {/* Stats - Only show Level and Streak */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="grid grid-cols-2 gap-4 mb-6"
+        >
+          <ClayCard className="text-center py-6">
+            <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+              <span className="text-2xl font-bold text-white">{profile?.level || 1}</span>
+            </div>
+            <p className="text-lg font-bold">Level {profile?.level || 1}</p>
+            <p className="text-sm text-gray-600">{profile?.xp_points || 0} XP</p>
+          </ClayCard>
+          <ClayCard className="text-center py-6">
+            <Flame className="w-16 h-16 mx-auto mb-3 text-orange-500" />
+            <p className="text-lg font-bold">{profile?.current_streak || 0} Days</p>
+            <p className="text-sm text-gray-600">Current Streak</p>
+          </ClayCard>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
