@@ -228,35 +228,32 @@ Provide a detailed analysis.`,
         </div>
 
         {/* Conversation */}
-        <div className="flex-1 overflow-y-auto space-y-4 mb-6">
-          {conversation.map((msg, index) => (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div className={`max-w-[80%] p-4 rounded-2xl ${
-                msg.role === 'user' 
-                  ? 'bg-blue-500 text-white' 
-                  : 'bg-gray-700 text-white'
-              }`}>
-                {msg.content}
+        <div className="flex-1 overflow-y-auto mb-6">
+          <div
+            className="w-full h-full bg-gray-800/80 rounded-2xl p-4 text-sm text-white whitespace-pre-wrap"
+            ref={chatEndRef}
+          >
+            {conversation.length === 0 && !loading && (
+              <span className="text-gray-400">Your live transcript will appear here as you speak.</span>
+            )}
+            {conversation.length > 0 && (
+              conversation.map((msg, index) => (
+                <p key={index} className="mb-2">
+                  <span className="font-semibold">
+                    {msg.role === 'ai' ? 'AI Interviewer' : 'You'}:
+                  </span>{' '}
+                  {msg.content}
+                </p>
+              ))
+            )}
+            {loading && (
+              <div className="mt-2 flex gap-1">
+                <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
               </div>
-            </motion.div>
-          ))}
-          {loading && (
-            <div className="flex justify-start">
-              <div className="p-4 rounded-2xl bg-gray-700 text-white">
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                  <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                  <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                </div>
-              </div>
-            </div>
-          )}
-          <div ref={chatEndRef} />
+            )}
+          </div>
         </div>
 
         {/* Controls */}
