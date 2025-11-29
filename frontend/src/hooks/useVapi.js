@@ -1,10 +1,12 @@
 import Vapi from '@vapi-ai/web';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-const publicKey = import.meta.env.VITE_VAPI_PUBLIC_KEY;
-const assistantId = import.meta.env.VITE_VAPI_ASSISTANT_ID;
 
-const useVapi = () => {
+const defaultPublicKey = import.meta.env.VITE_VAPI_PUBLIC_KEY;
+const defaultAssistantId = import.meta.env.VITE_VAPI_ASSISTANT_ID;
+
+const useVapi = (options = {}) => {
+    const { publicKey = defaultPublicKey, assistantId = defaultAssistantId } = options;
     const [volumeLevel, setVolumeLevel] = useState(0);
     const [isSessionActive, setIsSessionActive] = useState(false);
     const [conversation, setConversation] = useState([]); // { role: 'ai' | 'user', content: string }
@@ -49,7 +51,7 @@ const useVapi = () => {
                 console.error('Vapi error:', e);
             });
         }
-    }, []);
+    }, [publicKey, assistantId]);
 
     useEffect(() => {
         initializeVapi();
