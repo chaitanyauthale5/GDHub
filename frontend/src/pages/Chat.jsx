@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSocket } from '@/lib/SocketContext';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { api } from '@/api/apiClient';
@@ -13,19 +14,49 @@ export default function Chat() {
   const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
   const friendId = urlParams.get('friendId');
-  
+
   const [user, setUser] = useState(null);
   const [friend, setFriend] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef(null);
+  const socket = useSocket();
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadMessages, 3000);
-    return () => clearInterval(interval);
+    // const interval = setInterval(loadMessages, 3000);
+    // return () => clearInterval(interval);
   }, [friendId]);
+
+  useEffect(() => {
+    if (!socket || !friendId || !user) return;
+
+    // Create a unique room ID for the pair (e.g., sorted user IDs)
+    const roomId = [user.email, friendId].sort().join('_');
+    socket.emit('join_room', roomId);
+
+    const handleReceiveMessage = (newMessage) => {
+      // Only append if it belongs to this conversation
+      if (
+        (newMessage.from_user_id === friendId && newMessage.to_user_id === user.email) ||
+        (newMessage.from_user_id === user.email && newMessage.to_user_id === friendId)
+      ) {
+        setMessages((prev) => [...prev, newMessage]);
+
+        // Mark as read if it's from friend
+        if (newMessage.from_user_id === friendId) {
+          api.entities.ChatMessage.update(newMessage.id, { is_read: true }).catch(console.error);
+        }
+      }
+    };
+
+    socket.on('receive_message', handleReceiveMessage);
+
+    return () => {
+      socket.off('receive_message', handleReceiveMessage);
+    };
+  }, [socket, friendId, user]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -52,14 +83,14 @@ export default function Chat() {
 
   const loadMessages = async () => {
     if (!friendId) return;
-    
+
     try {
       const currentUser = await api.auth.me();
-      
+
       // Get messages between the two users
       const allMessages = await api.entities.ChatMessage.list('-created_date', 100);
 
-      const conversation = allMessages.filter(m => 
+      const conversation = allMessages.filter(m =>
         (m.from_user_id === currentUser.email && m.to_user_id === friendId) ||
         (m.from_user_id === friendId && m.to_user_id === currentUser.email)
       ).reverse();
@@ -67,7 +98,7 @@ export default function Chat() {
       setMessages(conversation);
 
       // Mark messages as read
-      const unreadMessages = conversation.filter(m => 
+      const unreadMessages = conversation.filter(m =>
         m.to_user_id === currentUser.email && !m.is_read
       );
       for (const msg of unreadMessages) {
@@ -82,16 +113,32 @@ export default function Chat() {
   const sendMessage = async () => {
     if (!inputMessage.trim() || !user || !friend) return;
 
-    await api.entities.ChatMessage.create({
+    const msgData = {
       from_user_id: user.email,
       from_user_name: user.full_name,
       to_user_id: friend.email,
       message: inputMessage,
       is_read: false
-    });
+    };
 
-    setInputMessage('');
-    await loadMessages();
+    // Optimistic update (optional, but good for UX)
+    // setMessages(prev => [...prev, { ...msgData, created_date: new Date().toISOString() }]);
+
+    try {
+      const savedMsg = await api.entities.ChatMessage.create(msgData);
+
+      if (socket) {
+        const roomId = [user.email, friendId].sort().join('_');
+        socket.emit('send_message', { ...savedMsg, room: roomId });
+      } else {
+        // Fallback if socket fails
+        await loadMessages();
+      }
+
+      setInputMessage('');
+    } catch (err) {
+      console.error("Failed to send", err);
+    }
   };
 
   if (loading) {
@@ -105,7 +152,7 @@ export default function Chat() {
   return (
     <div className="min-h-screen pb-20">
       <TopNav activePage="Dashboard" />
-      
+
       <div className="max-w-3xl mx-auto px-4 pt-24">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
@@ -142,16 +189,14 @@ export default function Chat() {
                   className={`flex ${message.from_user_id === user?.email ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[70%] p-3 rounded-2xl ${
-                      message.from_user_id === user?.email
-                        ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
+                    className={`max-w-[70%] p-3 rounded-2xl ${message.from_user_id === user?.email
+                      ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white'
+                      : 'bg-gray-100 text-gray-800'
+                      }`}
                   >
                     <p>{message.message}</p>
-                    <p className={`text-xs mt-1 ${
-                      message.from_user_id === user?.email ? 'text-white/70' : 'text-gray-400'
-                    }`}>
+                    <p className={`text-xs mt-1 ${message.from_user_id === user?.email ? 'text-white/70' : 'text-gray-400'
+                      }`}>
                       {new Date(message.created_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>

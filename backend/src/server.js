@@ -99,7 +99,7 @@ app.post('/api/debate-rooms/:id/join', async (req, res) => {
     if (!room) return res.status(404).json({ message: 'Not found' });
     const exists = (room.participants || []).some(p => p.user_id === user_id);
     if (!exists) {
-        const normSide = ['for','against','neutral'].includes(side) ? side : 'neutral';
+        const normSide = ['for', 'against', 'neutral'].includes(side) ? side : 'neutral';
         room.participants.push({ user_id, name: user_name, side: normSide });
         await room.save();
     }
@@ -126,9 +126,44 @@ app.use((err, req, res, next) => {
     res.status(500).json({ message: 'Server error' });
 });
 
+const http = require('http');
+const { Server } = require('socket.io');
+
 const start = async () => {
     await connectDB(config.mongoUri);
-    app.listen(config.port, () => {
+
+    const server = http.createServer(app);
+    const io = new Server(server, {
+        cors: {
+            origin: config.corsOrigins,
+            methods: ["GET", "POST"],
+            credentials: true
+        }
+    });
+
+    io.on('connection', (socket) => {
+        console.log('User connected:', socket.id);
+
+        socket.on('join_room', (room) => {
+            socket.join(room);
+            console.log(`User ${socket.id} joined room ${room}`);
+        });
+
+        socket.on('send_message', (data) => {
+            // data: { room, message, from_user_id, ... }
+            // Broadcast to everyone in the room INCLUDING sender (or exclude if handled optimistically on client)
+            io.to(data.room).emit('receive_message', data);
+        });
+
+        socket.on('disconnect', () => {
+            console.log('User disconnected:', socket.id);
+        });
+    });
+
+    // Make io accessible in routes if needed
+    app.set('io', io);
+
+    server.listen(config.port, () => {
         console.log(`Server listening on http://localhost:${config.port}`);
     });
 };
