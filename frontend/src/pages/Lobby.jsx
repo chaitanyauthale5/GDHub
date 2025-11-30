@@ -4,7 +4,8 @@ import { createPageUrl } from '../utils';
 import { api } from '@/api/apiClient';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { Users, Clock, Copy, Check, Play, Camera, Mic, ArrowLeft, LogOut, UserPlus, Share2, MessageSquare } from 'lucide-react';
+import { Users, Clock, Copy, Check, Play, Camera, Mic, ArrowLeft, LogOut, UserPlus, Share2, MessageSquare, Bot } from 'lucide-react';
+
 import ClayCard from '../components/shared/ClayCard';
 import GlassPanel from '../components/shared/GlassPanel';
 
@@ -15,6 +16,7 @@ export default function Lobby() {
   const [copied, setCopied] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
   const [micOn, setMicOn] = useState(true);
+  const [botLevel, setBotLevel] = useState(1);
 
   const urlParams = new URLSearchParams(window.location.search);
   const roomId = urlParams.get('roomId');
@@ -213,6 +215,7 @@ export default function Lobby() {
               // The host is whoever created the room - check host_id OR created_by fields
               const roomHostId = room.host_id || room.created_by;
               const isParticipantHost = participant.user_id === roomHostId;
+              const isBot = (participant.user_id || '').startsWith('ai:') || (participant.name || '').toLowerCase().includes('ai bot');
 
               return (
                 <motion.div
@@ -227,6 +230,11 @@ export default function Lobby() {
                       Host
                     </span>
                   )}
+                  {isBot && (
+                    <span className="absolute top-2 left-2 px-2 py-1 bg-purple-500 text-white text-[10px] font-bold rounded-full flex items-center gap-1">
+                      <Bot className="w-3 h-3" /> AI
+                    </span>
+                  )}
                   <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-gradient-to-br from-purple-400 to-blue-500 flex items-center justify-center text-white font-bold text-xl">
                     {participant.name?.charAt(0) || '?'}
                   </div>
@@ -234,6 +242,7 @@ export default function Lobby() {
                 </motion.div>
               );
               })}
+
 
               {/* Empty slots */}
               {Array.from({ length: (room?.team_size || 4) - (room?.participants?.length || 0) }).map((_, index) => (
@@ -255,6 +264,7 @@ export default function Lobby() {
 
         {/* Controls */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
           {/* Camera & Mic */}
           <ClayCard>
             <h3 className="font-bold mb-4">Audio & Video</h3>
@@ -306,6 +316,65 @@ export default function Lobby() {
                 <p className="font-bold text-lg text-gray-700">Waiting for host to start...</p>
                 <p className="text-sm text-gray-500 mt-2">The host will start the GD session</p>
               </div>
+            </ClayCard>
+          )}
+
+          {/* AI Bots Control - Host only */}
+          {isHost && (
+            <ClayCard className="bg-gradient-to-br from-purple-50 to-blue-50">
+              <h3 className="font-bold mb-3 flex items-center gap-2"><Bot className="w-5 h-5 text-purple-600" /> Add AI Bots</h3>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600 font-semibold">Level</label>
+                  <select
+                    value={botLevel}
+                    onChange={(e) => setBotLevel(parseInt(e.target.value))}
+                    className="px-3 py-2 rounded-xl border border-gray-200 bg-white"
+                  >
+                    {[1,2,3,4,5].map((lvl) => (
+                      <option key={lvl} value={lvl}>Lv {lvl}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1 flex gap-3">
+                  <button
+                    onClick={async () => {
+                      if (!room) return;
+                      const empty = Math.max(0, (room.team_size || 0) - (room.participants?.length || 0));
+                      if (empty <= 0) return;
+                      const bots = Array.from({ length: 1 }).map((_, i) => ({
+                        user_id: `ai:${botLevel}:${Date.now()}:${Math.random().toString(36).slice(2,6)}`,
+                        name: `AI Bot (Lv ${botLevel})`
+                      }));
+                      const updated = [ ...(room.participants || []), ...bots ].slice(0, room.team_size || bots.length);
+                      const saved = await api.entities.GDRoom.update(room.id, { participants: updated });
+                      setRoom(saved);
+                    }}
+                    className="flex-1 py-3 rounded-2xl bg-white text-gray-800 font-bold border-2 border-purple-200 hover:bg-purple-50"
+                  >
+                    Add 1 Bot
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!room) return;
+                      const curr = room.participants || [];
+                      const empty = Math.max(0, (room.team_size || 0) - curr.length);
+                      if (empty <= 0) return;
+                      const bots = Array.from({ length: empty }).map((_, i) => ({
+                        user_id: `ai:${botLevel}:${Date.now()+i}:${Math.random().toString(36).slice(2,6)}`,
+                        name: `AI Bot (Lv ${botLevel})`
+                      }));
+                      const updated = [ ...curr, ...bots ];
+                      const saved = await api.entities.GDRoom.update(room.id, { participants: updated });
+                      setRoom(saved);
+                    }}
+                    className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold shadow"
+                  >
+                    Fill Empty Slots
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">Bots occupy slots and won't join the video. You can remove them by reducing team size or re-creating the room.</p>
             </ClayCard>
           )}
         </div>

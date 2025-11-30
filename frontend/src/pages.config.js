@@ -5,6 +5,7 @@ import AIInterviewHub from './pages/AIInterviewHub';
 import AIInterviewRoom from './pages/AIInterviewRoom';
 import BrowseRooms from './pages/BrowseRooms';
 import Chat from './pages/Chat';
+import Contact from './pages/Contact';
 import CreateDebateRoom from './pages/CreateDebateRoom';
 import CreateRoom from './pages/CreateRoom';
 import CreateTournament from './pages/CreateTournament';
@@ -25,19 +26,21 @@ import GDRoom from './pages/GDRoom';
 import HumanInterviewRoom from './pages/HumanInterviewRoom';
 import JoinDebateRoom from './pages/JoinDebateRoom';
 import JoinRoom from './pages/JoinRoom';
+import Landing from './pages/Landing';
 import Leaderboard from './pages/Leaderboard';
 import Lobby from './pages/Lobby';
 import Login from './pages/Login';
 import PostGDFeedback from './pages/PostGDFeedback';
+import Privacy from './pages/Privacy';
 import Profile from './pages/Profile';
 import Progress from './pages/Progress';
 import Register from './pages/Register';
 import SoloAnalysis from './pages/SoloAnalysis';
 import SoloPractice from './pages/SoloPractice';
+import Terms from './pages/Terms';
 import TournamentHub from './pages/TournamentHub';
 import TournamentLobby from './pages/TournamentLobby';
 import UserProfile from './pages/UserProfile';
-import Landing from './pages/Landing';
 
 export const PAGES = {
     "Landing": Landing,
@@ -80,6 +83,9 @@ export const PAGES = {
     "Progress": Progress,
     "Login": Login,
     "Register": Register,
+    "Contact": Contact,
+    "Terms": Terms,
+    "Privacy": Privacy,
 }
 
 export const pagesConfig = {

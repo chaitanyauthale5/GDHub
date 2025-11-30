@@ -10,6 +10,7 @@ import { Route, BrowserRouter as Router, Routes, useLocation } from 'react-route
 import './App.css'
 import PageNotFound from './lib/PageNotFound'
 import { pagesConfig } from './pages.config'
+import AppFooter from './components/navigation/AppFooter'
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -24,7 +25,15 @@ const AuthenticatedApp = () => {
   const location = useLocation();
   const pathname = location.pathname;
   const p = pathname?.toLowerCase?.() || pathname;
-  const isPublicPage = p === '/' || p === '/about' || p === '/login' || p === '/register';
+  const isPublicPage = (
+    p === '/' ||
+    p === '/about' ||
+    p === '/contact' ||
+    p === '/terms' ||
+    p === '/privacy' ||
+    p === '/login' ||
+    p === '/register'
+  );
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
@@ -82,6 +91,7 @@ function App() {
           <Router>
             <NavigationTracker />
             <AuthenticatedApp />
+            <AppFooter />
           </Router>
           <Toaster />
           <VisualEditAgent />

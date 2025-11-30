@@ -243,11 +243,11 @@ export default function Leaderboard() {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: index * 0.03 }}
                 whileHover={{ scale: 1.01, x: 4 }}
-                className={`flex items-center gap-3 p-3 rounded-2xl transition-all cursor-pointer ${
+                className={`relative flex items-center gap-3 p-3 rounded-2xl transition-all cursor-pointer ${
                   profile.user_id === currentUser?.id || profile.user_id === currentUser?.email
                     ? 'bg-gradient-to-r from-purple-100 to-blue-100 border-2 border-purple-400 shadow-lg' 
                     : 'bg-white/70 hover:bg-white hover:shadow-md'
-                }`}
+                } ${selectedUser === profile.id ? 'z-20 mb-6' : ''}`}
                 onClick={() => setSelectedUser(selectedUser === profile.id ? null : profile.id)}
               >
                 {/* Rank Number */}
@@ -304,9 +304,9 @@ export default function Leaderboard() {
                   {/* User Action Popup */}
                   {selectedUser === profile.id && profile.user_id !== currentUser?.id && profile.user_id !== currentUser?.email && (
                     <motion.div
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="absolute left-16 top-0 bg-white rounded-xl shadow-2xl border border-gray-200 ring-1 ring-black/5 p-2 z-[100] min-w-[180px] backdrop-blur-sm"
+                      initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      className="absolute left-16 top-full mt-2 bg-white rounded-xl shadow-2xl border border-gray-200 ring-1 ring-black/5 p-2 z-[100] min-w-[200px] backdrop-blur-sm"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <button

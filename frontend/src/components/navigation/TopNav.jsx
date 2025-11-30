@@ -19,7 +19,9 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
   const [myProfile, setMyProfile] = useState(null);
   const socket = useSocket();
 
-  const navItems = ['Home', 'Dashboard', 'Explore', 'Progress', 'Leaderboard', 'About'];
+  const navItems = currentUser
+    ? ['Dashboard', 'Explore', 'Progress', 'Leaderboard']
+    : ['Home', 'About', 'Contact'];
 
   useEffect(() => {
     loadNotifications();
@@ -187,194 +189,211 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
           </div>
 
           {/* Right Section */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="hidden sm:block">
-              <XPBadge xp={user?.xp_points || 0} level={user?.level || 1} />
-            </div>
+          {currentUser ? (
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="hidden sm:block">
+                <XPBadge xp={user?.xp_points || 0} level={user?.level || 1} />
+              </div>
 
-            {/* Notifications */}
-            <div className="relative">
-              <button
-                onClick={toggleNotifications}
-                className="p-2.5 sm:p-3 rounded-full bg-gray-100 hover:bg-gray-200 transition-all relative"
-              >
-                <Bell className="w-5 h-5 text-gray-700" />
-                {(friendRequests.length > 0 || notifications.length > 0) && (
-                  <span className="absolute top-1 right-1 w-5 h-5 bg-red-500 rounded-full text-white text-xs flex items-center justify-center font-bold">
-                    {friendRequests.length + notifications.length}
-                  </span>
-                )}
-              </button>
+              {/* Notifications */}
+              <div className="relative">
+                <button
+                  onClick={toggleNotifications}
+                  className="p-2.5 sm:p-3 rounded-full bg-gray-100 hover:bg-gray-200 transition-all relative"
+                >
+                  <Bell className="w-5 h-5 text-gray-700" />
+                  {(friendRequests.length > 0 || notifications.length > 0) && (
+                    <span className="absolute top-1 right-1 w-5 h-5 bg-red-500 rounded-full text-white text-xs flex items-center justify-center font-bold">
+                      {friendRequests.length + notifications.length}
+                    </span>
+                  )}
+                </button>
 
-              <AnimatePresence>
-                {showNotifications && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl p-4 shadow-2xl border border-gray-100 z-50 max-h-96 overflow-y-auto"
-                  >
-                    <h3 className="font-bold text-lg mb-3">Notifications</h3>
+                <AnimatePresence>
+                  {showNotifications && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl p-4 shadow-2xl border border-gray-100 z-50 max-h-96 overflow-y-auto"
+                    >
+                      <h3 className="font-bold text-lg mb-3">Notifications</h3>
 
-                    {/* Friend Requests */}
-                    {friendRequests.length > 0 && (
-                      <div className="mb-4">
-                        <p className="text-xs font-bold text-gray-500 uppercase mb-2">Friend Requests</p>
+                      {/* Friend Requests */}
+                      {friendRequests.length > 0 && (
+                        <div className="mb-4">
+                          <p className="text-xs font-bold text-gray-500 uppercase mb-2">Friend Requests</p>
+                          <div className="space-y-2">
+                            {friendRequests.map((request) => (
+                              <div key={request.id} className="p-3 bg-purple-50 rounded-xl border border-purple-200">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold">
+                                    {request.from_user_name?.charAt(0) || 'U'}
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="font-medium text-sm">{request.from_user_name}</p>
+                                    <p className="text-xs text-gray-600">Wants to be your friend</p>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2 mt-3">
+                                  <button
+                                    onClick={() => acceptFriendRequest(request)}
+                                    className="flex-1 py-2 rounded-lg bg-green-500 text-white font-bold text-sm flex items-center justify-center gap-1 hover:bg-green-600"
+                                  >
+                                    <Check className="w-4 h-4" />
+                                    Accept
+                                  </button>
+                                  <button
+                                    onClick={() => rejectFriendRequest(request)}
+                                    className="flex-1 py-2 rounded-lg bg-gray-200 text-gray-700 font-bold text-sm flex items-center justify-center gap-1 hover:bg-gray-300"
+                                  >
+                                    <X className="w-4 h-4" />
+                                    Decline
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Other Notifications */}
+                      {notifications.length > 0 ? (
                         <div className="space-y-2">
-                          {friendRequests.map((request) => (
-                            <div key={request.id} className="p-3 bg-purple-50 rounded-xl border border-purple-200">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold">
-                                  {request.from_user_name?.charAt(0) || 'U'}
-                                </div>
-                                <div className="flex-1">
-                                  <p className="font-medium text-sm">{request.from_user_name}</p>
-                                  <p className="text-xs text-gray-600">Wants to be your friend</p>
-                                </div>
-                              </div>
-                              <div className="flex gap-2 mt-3">
-                                <button
-                                  onClick={() => acceptFriendRequest(request)}
-                                  className="flex-1 py-2 rounded-lg bg-green-500 text-white font-bold text-sm flex items-center justify-center gap-1 hover:bg-green-600"
-                                >
-                                  <Check className="w-4 h-4" />
-                                  Accept
-                                </button>
-                                <button
-                                  onClick={() => rejectFriendRequest(request)}
-                                  className="flex-1 py-2 rounded-lg bg-gray-200 text-gray-700 font-bold text-sm flex items-center justify-center gap-1 hover:bg-gray-300"
-                                >
-                                  <X className="w-4 h-4" />
-                                  Decline
-                                </button>
-                              </div>
+                          {notifications.map((notif) => (
+                            <div key={notif.id} className="p-3 bg-gray-50 rounded-xl">
+                              <p className="text-sm font-medium">{notif.title}</p>
+                              <p className="text-xs text-gray-600">{notif.message}</p>
                             </div>
                           ))}
                         </div>
-                      </div>
-                    )}
+                      ) : friendRequests.length === 0 ? (
+                        <div className="text-center py-6 text-gray-400">
+                          <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No new notifications</p>
+                        </div>
+                      ) : null}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
 
-                    {/* Other Notifications */}
-                    {notifications.length > 0 ? (
-                      <div className="space-y-2">
-                        {notifications.map((notif) => (
-                          <div key={notif.id} className="p-3 bg-gray-50 rounded-xl">
-                            <p className="text-sm font-medium">{notif.title}</p>
-                            <p className="text-xs text-gray-600">{notif.message}</p>
-                          </div>
-                        ))}
-                      </div>
-                    ) : friendRequests.length === 0 ? (
-                      <div className="text-center py-6 text-gray-400">
-                        <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">No new notifications</p>
-                      </div>
-                    ) : null}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+              {/* Chat */}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setShowChat(!showChat);
+                    setShowNotifications(false);
+                    setShowProfileMenu(false);
+                  }}
+                  className="p-2.5 sm:p-3 rounded-full bg-gray-100 hover:bg-gray-200 transition-all"
+                >
+                  <MessageCircle className="w-5 h-5 text-gray-700" />
+                </button>
 
-            {/* Chat */}
-            <div className="relative">
-              <button
-                onClick={() => {
-                  setShowChat(!showChat);
-                  setShowNotifications(false);
-                  setShowProfileMenu(false);
-                }}
-                className="p-2.5 sm:p-3 rounded-full bg-gray-100 hover:bg-gray-200 transition-all"
-              >
-                <MessageCircle className="w-5 h-5 text-gray-700" />
-              </button>
-
-              <AnimatePresence>
-                {showChat && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl p-4 shadow-2xl border border-gray-100 z-50"
-                  >
-                    <h3 className="font-bold text-lg mb-3">Chat with Friends</h3>
-                    {friends.length > 0 ? (
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {friends.map((friend) => (
-                          <button
-                            key={friend.id}
-                            onClick={() => openChat(friend.email)}
-                            className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-all"
-                          >
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold">
-                              {friend.full_name?.charAt(0) || 'U'}
-                            </div>
-                            <div className="text-left">
-                              <p className="font-medium">{friend.full_name}</p>
-                              <p className="text-xs text-gray-500">Click to chat</p>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-gray-400">
-                        <UserPlus className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">No friends yet</p>
-                        <p className="text-xs mt-1">Add friends from the leaderboard!</p>
-                      </div>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Profile Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => {
-                  setShowProfileMenu(!showProfileMenu);
-                  setShowNotifications(false);
-                  setShowChat(false);
-                }}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-gradient-to-r from-purple-500 to-blue-500 text-white flex items-center justify-center shadow-lg hover:shadow-xl transition-all"
-              >
-                {myProfile?.avatar ? (
-                  <img src={myProfile.avatar} alt="Avatar" className="w-full h-full object-cover" />
-                ) : (
-                  <User className="w-5 h-5" />
-                )}
-              </button>
-
-              <AnimatePresence>
-                {showProfileMenu && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="absolute right-0 mt-2 w-48 bg-white rounded-2xl p-2 shadow-2xl border border-gray-100 z-50"
-                  >
-                    <Link
-                      to={createPageUrl('Profile')}
-                      className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 transition-colors"
-                      onClick={() => setShowProfileMenu(false)}
+                <AnimatePresence>
+                  {showChat && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl p-4 shadow-2xl border border-gray-100 z-50"
                     >
-                      <User className="w-5 h-5 text-gray-600" />
-                      <span className="font-medium">Profile</span>
-                    </Link>
-                    <button
-                      onClick={() => {
-                        api.auth.logout();
-                        setShowProfileMenu(false);
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-red-50 text-red-600 transition-colors"
+                      <h3 className="font-bold text-lg mb-3">Chat with Friends</h3>
+                      {friends.length > 0 ? (
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                          {friends.map((friend) => (
+                            <button
+                              key={friend.id}
+                              onClick={() => openChat(friend.email)}
+                              className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-all"
+                            >
+                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold">
+                                {friend.full_name?.charAt(0) || 'U'}
+                              </div>
+                              <div className="text-left">
+                                <p className="font-medium">{friend.full_name}</p>
+                                <p className="text-xs text-gray-500">Click to chat</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-gray-400">
+                          <UserPlus className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No friends yet</p>
+                          <p className="text-xs mt-1">Add friends from the leaderboard!</p>
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Profile Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setShowProfileMenu(!showProfileMenu);
+                    setShowNotifications(false);
+                    setShowChat(false);
+                  }}
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-full overflow-hidden bg-gradient-to-r from-purple-500 to-blue-500 text-white flex items-center justify-center shadow-lg hover:shadow-xl transition-all"
+                >
+                  {myProfile?.avatar ? (
+                    <img src={myProfile.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="w-5 h-5" />
+                  )}
+                </button>
+
+                <AnimatePresence>
+                  {showProfileMenu && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="absolute right-0 mt-2 w-48 bg-white rounded-2xl p-2 shadow-2xl border border-gray-100 z-50"
                     >
-                      <LogOut className="w-5 h-5" />
-                      <span className="font-medium">Logout</span>
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                      <Link
+                        to={createPageUrl('Profile')}
+                        className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 transition-colors"
+                        onClick={() => setShowProfileMenu(false)}
+                      >
+                        <User className="w-5 h-5 text-gray-600" />
+                        <span className="font-medium">Profile</span>
+                      </Link>
+                      <button
+                        onClick={() => {
+                          api.auth.logout();
+                          setShowProfileMenu(false);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-red-50 text-red-600 transition-colors"
+                      >
+                        <LogOut className="w-5 h-5" />
+                        <span className="font-medium">Logout</span>
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Link
+                to={createPageUrl('Login')}
+                className="px-4 py-2.5 rounded-full font-bold text-gray-700 hover:bg-gray-100"
+              >
+                Log in
+              </Link>
+              <Link
+                to={createPageUrl('Register')}
+                className="px-4 py-2.5 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold shadow"
+              >
+                Sign Up
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </nav>
