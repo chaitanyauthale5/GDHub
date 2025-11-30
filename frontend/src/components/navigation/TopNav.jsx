@@ -163,7 +163,8 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
   return (
     <nav className="sticky top-0 left-0 right-0 z-50 bg-white border-b-2 border-gray-100 shadow-lg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 sm:h-20">
+        <div className="flex items-center justify-between h-16 sm:h-20 flex-wrap gap-y-2">
+
           {/* Logo */}
           <div className="flex items-center gap-3">
             <img
@@ -223,7 +224,23 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                       exit={{ opacity: 0, y: -10 }}
                       className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl p-4 shadow-2xl border border-gray-100 z-50 max-h-96 overflow-y-auto"
                     >
-                      <h3 className="font-bold text-lg mb-3">Notifications</h3>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-bold text-lg">Notifications</h3>
+                        {(friendRequests.length > 0 || notifications.length > 0) && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const unread = await api.entities.Notification.filter({ user_id: currentUser.email, is_read: false });
+                                await Promise.all(unread.map(n => api.entities.Notification.update(n.id, { is_read: true })));
+                                loadNotifications();
+                              } catch {}
+                            }}
+                            className="text-xs font-bold text-blue-600 hover:underline"
+                          >
+                            Mark all as read
+                          </button>
+                        )}
+                      </div>
 
                       {/* Friend Requests */}
                       {friendRequests.length > 0 && (
@@ -269,7 +286,43 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                           {notifications.map((notif) => (
                             <div key={notif.id} className="p-3 bg-gray-50 rounded-xl">
                               <p className="text-sm font-medium">{notif.title}</p>
-                              <p className="text-xs text-gray-600">{notif.message}</p>
+                              <p className="text-xs text-gray-600 mb-2">{notif.message}</p>
+                              {notif.type === 'room_invite' && notif.room_id && (
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const me = await api.auth.me();
+                                        const rooms = await api.entities.GDRoom.filter({ id: notif.room_id });
+                                        if (rooms.length === 0) return;
+                                        const room = rooms[0];
+                                        const isAlready = (room.participants || []).some(p => p.user_id === me.email || p.user_id === me.id);
+                                        if (!isAlready) {
+                                          const updated = { participants: [ ...(room.participants || []), { user_id: me.email, name: me.full_name, joined_at: new Date().toISOString() } ] };
+                                          await api.entities.GDRoom.update(room.id, updated);
+                                        }
+                                        await api.entities.Notification.update(notif.id, { is_read: true });
+                                        if (room.status === 'lobby') {
+                                          navigate(createPageUrl(`Lobby?roomId=${room.id}`));
+                                        } else if (room.status === 'active') {
+                                          navigate(createPageUrl(`GDPrepare?roomId=${room.id}`));
+                                        } else {
+                                          navigate(createPageUrl('Dashboard'));
+                                        }
+                                      } catch (e) {}
+                                    }}
+                                    className="flex-1 py-1.5 rounded-lg bg-green-500 text-white text-xs font-bold"
+                                  >
+                                    Accept & Join
+                                  </button>
+                                  <button
+                                    onClick={async () => { try { await api.entities.Notification.update(notif.id, { is_read: true }); loadNotifications(); } catch {} }}
+                                    className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs font-bold"
+                                  >
+                                    Mark read
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -282,6 +335,7 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                     </motion.div>
                   )}
                 </AnimatePresence>
+
               </div>
 
               {/* Chat */}

@@ -10,10 +10,12 @@ import TopNav from '../components/navigation/TopNav';
 export default function GDAnalysis() {
   const [session, setSession] = useState(null);
   const [analysis, setAnalysis] = useState(null);
+  const [perUser, setPerUser] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const urlParams = new URLSearchParams(window.location.search);
   const sessionId = urlParams.get('sessionId');
+  const roomId = urlParams.get('roomId');
 
   useEffect(() => {
     loadSessionAndAnalyze();
@@ -21,11 +23,33 @@ export default function GDAnalysis() {
 
   const loadSessionAndAnalyze = async () => {
     try {
-      const sessions = await api.entities.GDSession.filter({ id: sessionId });
+      if (sessionId) {
+        const sessions = await api.entities.GDSession.filter({ id: sessionId });
+        if (sessions.length > 0) {
+          setSession(sessions[0]);
+          await generateAnalysis(sessions[0]);
+          await generateParticipantAnalyses(sessions[0]);
+          setLoading(false);
+          return;
+        }
+      }
 
-      if (sessions.length > 0) {
-        setSession(sessions[0]);
-        await generateAnalysis(sessions[0]);
+      if (roomId) {
+        const rooms = await api.entities.GDRoom.filter({ id: roomId });
+        if (rooms.length > 0) {
+          const r = rooms[0];
+          const pseudoSession = {
+            id: `room-${r.id}`,
+            room_id: r.id,
+            topic: r.topic,
+            duration: r.duration,
+            mode: r.mode,
+            participants: r.participants || [],
+          };
+          setSession(pseudoSession);
+          await generateAnalysis(pseudoSession);
+          await generateParticipantAnalyses(pseudoSession);
+        }
       }
     } catch (error) {
       console.error('Error loading session:', error);
@@ -33,10 +57,22 @@ export default function GDAnalysis() {
     setLoading(false);
   };
 
+  const groupTranscriptsByUser = (items = []) => {
+    const map = new Map();
+    for (const t of items) {
+      const key = t.user_id || t.user_name || 'unknown';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(t);
+    }
+    for (const [k, arr] of map) {
+      arr.sort((a, b) => (a.start_ms || 0) - (b.start_ms || 0));
+    }
+    return map;
+  };
+
   const generateAnalysis = async (sessionData) => {
     try {
       const response = await api.integrations.Core.InvokeLLM({
-
         prompt: `Analyze this group discussion session and provide detailed feedback:
 
 Topic: ${sessionData.topic}
@@ -72,6 +108,51 @@ Generate a comprehensive analysis in JSON format with:
       setAnalysis(response);
     } catch (error) {
       console.error('Error generating analysis:', error);
+    }
+  };
+
+  const generateParticipantAnalyses = async (sessionData) => {
+    try {
+      const transcripts = await api.entities.GDTranscript.filter({ room_id: sessionData.room_id });
+      const grouped = groupTranscriptsByUser(transcripts);
+      const participants = sessionData.participants || [];
+      const index = {};
+      participants.forEach(p => { index[p.user_id] = p; });
+
+      const results = [];
+      for (const [userId, items] of grouped.entries()) {
+        const name = index[userId]?.name || items[0]?.user_name || 'Participant';
+        const totalMs = items.reduce((sum, t) => sum + Math.max(0, (t.end_ms || 0) - (t.start_ms || 0)), 0);
+        const text = items.map(t => t.text).join(' ').slice(0, 4000);
+        let ai;
+        try {
+          ai = await api.integrations.Core.InvokeLLM({
+            prompt: `Analyze the following participant's contributions in a group discussion. Provide scores and feedback.\n\nParticipant: ${name}\nTopic: ${sessionData.topic}\nTranscript (may be partial):\n${text}\n\nReturn JSON with keys: overallScore (0-100), communicationScore (0-100), knowledgeScore (0-100), participationSummary (1-2 sentences), strengths (3 items), improvements (3 items).`,
+            response_json_schema: {
+              type: 'object',
+              properties: {
+                overallScore: { type: 'number' },
+                communicationScore: { type: 'number' },
+                knowledgeScore: { type: 'number' },
+                participationSummary: { type: 'string' },
+                strengths: { type: 'array', items: { type: 'string' } },
+                improvements: { type: 'array', items: { type: 'string' } },
+              },
+            },
+          });
+        } catch (e) {
+          ai = null;
+        }
+        results.push({ userId, name, talkTimeSec: Math.round(totalMs / 1000), ai });
+      }
+      for (const p of participants) {
+        if (!results.find(r => r.userId === p.user_id)) {
+          results.push({ userId: p.user_id, name: p.name, talkTimeSec: 0, ai: null });
+        }
+      }
+      setPerUser(results);
+    } catch (error) {
+      console.error('Error generating participant analyses:', error);
     }
   };
 
@@ -230,6 +311,51 @@ Generate a comprehensive analysis in JSON format with:
               </ul>
             </motion.div>
           </>
+        )}
+
+        {/* Per-Participant Analysis */}
+        {perUser.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="mb-6">
+            <div className="bg-white rounded-3xl p-6 shadow-xl border-2 border-gray-100">
+              <h2 className="font-bold text-xl mb-4">Participant Analysis</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {perUser.map((u, idx) => (
+                  <div key={u.userId || idx} className="p-4 rounded-2xl bg-gray-50 border border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="font-bold">{u.name}</div>
+                      <div className="text-xs text-gray-600">Talk Time: <span className="font-semibold">{u.talkTimeSec}s</span></div>
+                    </div>
+                    {u.ai ? (
+                      <div className="space-y-2 text-sm">
+                        <div className="flex gap-3 flex-wrap">
+                          <span className="px-2 py-1 rounded-full bg-purple-100 text-purple-700 font-bold">Overall {u.ai.overallScore}</span>
+                          <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-bold">Comm {u.ai.communicationScore}</span>
+                          <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 font-bold">Knowledge {u.ai.knowledgeScore}</span>
+                        </div>
+                        <p className="text-gray-700">{u.ai.participationSummary}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <div className="text-xs font-bold text-green-700 mb-1">Strengths</div>
+                            <ul className="list-disc pl-5 text-gray-700">
+                              {(u.ai.strengths || []).map((s, i) => <li key={i}>{s}</li>)}
+                            </ul>
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-orange-700 mb-1">Improvements</div>
+                            <ul className="list-disc pl-5 text-gray-700">
+                              {(u.ai.improvements || []).map((s, i) => <li key={i}>{s}</li>)}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-500">No transcript captured. Ensure mic permission is granted next time.</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
         )}
 
         {/* Action Buttons */}

@@ -1,29 +1,25 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
 
-import { Swords, Clock, ThumbsUp, ThumbsDown, X, ArrowLeft, LogOut } from 'lucide-react';
+import { Swords, Clock, ThumbsUp, ThumbsDown, X, ArrowLeft, LogOut, Bot } from 'lucide-react';
+import useWebRTC from '@/hooks/useWebRTC';
+import useSpeechToTranscript from '@/hooks/useSpeechToTranscript';
 
 export default function DebateRoom() {
   const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
-  const roomId = urlParams.get('roomId');
-  
+  const roomId = urlParams.get('roomId') || urlParams.get('roomid');
+
   const [room, setRoom] = useState(null);
   const [user, setUser] = useState(null);
   const [timeLeft, setTimeLeft] = useState(0);
-  const jitsiContainerRef = useRef(null);
-  const apiRef = useRef(null);
+  const [sessionActive, setSessionActive] = useState(true);
 
   useEffect(() => {
     loadData();
-    return () => {
-      if (apiRef.current) {
-        apiRef.current.dispose();
-      }
-    };
   }, []);
 
   useEffect(() => {
@@ -42,11 +38,14 @@ export default function DebateRoom() {
     }
   }, [room, timeLeft]);
 
-  useEffect(() => {
-    if (room && user && jitsiContainerRef.current && !apiRef.current) {
-      initJitsi();
-    }
-  }, [room, user]);
+  // WebRTC setup (always publish media)
+  const { localStream, remoteStreams, micOn, cameraOn, toggleMic, toggleCamera, mediaError, retryDevices } = useWebRTC({
+    roomId,
+    me: user,
+    maxParticipants: room?.team_size || 8,
+    sendMedia: true,
+  });
+  useSpeechToTranscript({ enabled: sessionActive && !!roomId && !!user, roomId, user, sessionType: 'debate' });
 
   const loadData = async () => {
     try {
@@ -61,42 +60,18 @@ export default function DebateRoom() {
     }
   };
 
-  const initJitsi = () => {
-    const script = document.createElement('script');
-    script.src = 'https://meet.jit.si/external_api.js';
-    script.async = true;
-    script.onload = () => {
-      apiRef.current = new window.JitsiMeetExternalAPI('meet.jit.si', {
-        roomName: `GDHubDebate_${room.room_code}`,
-        parentNode: jitsiContainerRef.current,
-        userInfo: {
-          displayName: user.full_name,
-          email: user.email
-        },
-        configOverwrite: {
-          startWithAudioMuted: false,
-          startWithVideoMuted: false,
-          prejoinPageEnabled: false
-        },
-        interfaceConfigOverwrite: {
-          TOOLBAR_BUTTONS: [
-            'microphone', 'camera', 'closedcaptions', 'desktop',
-            'fullscreen', 'fodeviceselection', 'chat', 'raisehand',
-            'videoquality', 'filmstrip', 'tileview'
-          ],
-          SHOW_JITSI_WATERMARK: false,
-          SHOW_WATERMARK_FOR_GUESTS: false
-        }
-      });
-    };
-    document.body.appendChild(script);
+  const setVideoRef = (el, stream, isSelf = false) => {
+    if (!el || !stream) return;
+    try {
+      el.srcObject = stream;
+      if (isSelf) el.muted = true;
+      el.onloadedmetadata = () => el.play().catch(() => {});
+    } catch {}
   };
 
   const endDebate = async () => {
+    setSessionActive(false);
     await api.entities.DebateRoom.update(roomId, { status: 'completed' });
-    if (apiRef.current) {
-      apiRef.current.dispose();
-    }
     navigate(createPageUrl('DebateArena'));
   };
 
@@ -164,8 +139,47 @@ export default function DebateRoom() {
         <h2 className="text-white font-bold text-lg">{room.topic}</h2>
       </div>
 
-      {/* Jitsi Container */}
-      <div ref={jitsiContainerRef} className="flex-1" />
+      {/* WebRTC Grid */}
+      <div className="flex-1 p-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 bg-gray-900">
+        {/* Local */}
+        <div className="relative rounded-xl overflow-hidden bg-gray-800 aspect-video">
+          {localStream ? (
+            <video data-self="true" ref={el => setVideoRef(el, localStream, true)} playsInline className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400">{mediaError ? 'Mic/Camera blocked' : 'Connecting camera...'}</div>
+          )}
+          <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded">You</div>
+        </div>
+        
+        {/* Remotes */}
+        {Object.entries(remoteStreams || {}).map(([peerId, stream]) => (
+          <div key={peerId} className="relative rounded-xl overflow-hidden bg-gray-800 aspect-video">
+            {stream ? (
+              <video ref={el => setVideoRef(el, stream)} playsInline className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-gray-400">Waiting for video...</div>
+            )}
+            <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded">{peerId}</div>
+          </div>
+        ))}
+        {/* AI Judge */}
+        <div className="relative rounded-xl overflow-hidden bg-gradient-to-br from-red-700 to-orange-700 aspect-video flex items-center justify-center">
+          <div className="flex flex-col items-center text-white">
+            <Bot className="w-10 h-10 mb-2" />
+            <span className="font-bold">AI Judge</span>
+          </div>
+          <div className="absolute top-2 right-2 text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full">Observer</div>
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div className="bg-gray-800 px-4 py-3 flex items-center gap-3 justify-center">
+        <button onClick={toggleMic} className={`px-3 py-2 rounded-lg text-sm font-bold ${micOn ? 'bg-green-600 text-white' : 'bg-gray-600 text-white'}`}>{micOn ? 'Mic On' : 'Mic Off'}</button>
+        <button onClick={toggleCamera} className={`px-3 py-2 rounded-lg text-sm font-bold ${cameraOn ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'}`}>{cameraOn ? 'Cam On' : 'Cam Off'}</button>
+        {mediaError && (
+          <button onClick={retryDevices} className="px-3 py-2 rounded-lg text-sm font-bold bg-yellow-600 text-white">Retry Devices</button>
+        )}
+      </div>
     </div>
   );
 }

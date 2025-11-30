@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import io from 'socket.io-client';
 import { useAuth } from './AuthContext';
 
-const SocketContext = createContext();
+const SocketContext = createContext(null);
 
 export const useSocket = () => {
     return useContext(SocketContext);
@@ -10,38 +10,31 @@ export const useSocket = () => {
 
 export const SocketProvider = ({ children }) => {
     const [socket, setSocket] = useState(null);
-    const { isAuthenticated, user } = useAuth();
+    const { user } = useAuth();
 
     useEffect(() => {
-        if (isAuthenticated && user) {
-            // Connect to the backend URL. Adjust if your backend URL is different in dev/prod.
-            // Assuming backend is on localhost:5000 or same host in prod
-            const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        // Always connect; register user if available
+        const backendUrl = (typeof globalThis !== 'undefined' && globalThis['__API_BASE_URL__'])
+            ? globalThis['__API_BASE_URL__']
+            : 'http://localhost:5000';
+        const newSocket = io(backendUrl, {
+            withCredentials: true,
+            transports: ['websocket', 'polling'],
+        });
+        setSocket(newSocket);
 
-            const newSocket = io(backendUrl, {
-                withCredentials: true,
-                transports: ['websocket', 'polling'],
-            });
+        const onConnect = () => {
+            console.log('Socket connected:', newSocket.id);
+            if (user?.email) newSocket.emit('register_user', user.email);
+        };
+        newSocket.on('connect', onConnect);
 
-            setSocket(newSocket);
-
-            newSocket.on('connect', () => {
-                console.log('Socket connected:', newSocket.id);
-                if (user?.email) {
-                    newSocket.emit('register_user', user.email);
-                }
-            });
-
-            return () => {
-                newSocket.disconnect();
-            };
-        } else {
-            if (socket) {
-                socket.disconnect();
-                setSocket(null);
-            }
-        }
-    }, [isAuthenticated, user]);
+        return () => {
+            try { newSocket.off('connect', onConnect); } catch {}
+            newSocket.disconnect();
+        };
+        // re-run if user email changes to re-register
+    }, [user?.email]);
 
     return (
         <SocketContext.Provider value={socket}>

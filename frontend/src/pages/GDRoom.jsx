@@ -1,22 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
+
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
 
-import { X, Clock, Users, MessageSquare, ArrowLeft } from 'lucide-react';
+import { X, Clock, Users, MessageSquare, ArrowLeft, Bot } from 'lucide-react';
+import useWebRTC from '@/hooks/useWebRTC';
+import useSpeechToTranscript from '@/hooks/useSpeechToTranscript';
 
 export default function GDRoom() {
   const navigate = useNavigate();
   const [room, setRoom] = useState(null);
   const [user, setUser] = useState(null);
   const [timeLeft, setTimeLeft] = useState(0);
-  const [jitsiLoaded, setJitsiLoaded] = useState(false);
-  const jitsiContainerRef = useRef(null);
-  const jitsiApiRef = useRef(null);
+  const [sessionActive, setSessionActive] = useState(true);
+  const isEndingRef = useRef(false);
 
   const urlParams = new URLSearchParams(window.location.search);
-  const roomId = urlParams.get('roomId');
+  const q1 = urlParams.get('roomId');
+  const q2 = urlParams.get('roomid');
+  const roomId = [q1, q2].find(v => v && v !== 'null' && v !== 'undefined') || null;
 
   useEffect(() => {
     loadData();
@@ -44,16 +48,17 @@ export default function GDRoom() {
     return () => clearInterval(timer);
   }, [timeLeft]);
 
-  useEffect(() => {
-    if (room && user && !jitsiLoaded) {
-      initJitsi();
-    }
-    return () => {
-      if (jitsiApiRef.current) {
-        jitsiApiRef.current.dispose();
-      }
-    };
-  }, [room, user]);
+  // WebRTC media and signaling
+  const { localStream, remoteStreams, micOn, cameraOn, toggleMic, toggleCamera, mediaError, retryDevices, diagnostics } = useWebRTC({
+    roomId,
+    me: user,
+    maxParticipants: room?.team_size || 8,
+    sendMedia: true,
+  });
+  const [showDebug, setShowDebug] = useState(false);
+
+  // Client-side speech recognition to transcript my speech
+  useSpeechToTranscript({ enabled: sessionActive && !!roomId && !!user, roomId, user });
 
   useEffect(() => {
     let timer;
@@ -61,14 +66,14 @@ export default function GDRoom() {
       try {
         const data = await api.entities.GDRoom.filter({ id: roomId });
         if (data.length === 0 || data[0].status === 'completed') {
-          if (jitsiApiRef.current) {
-            jitsiApiRef.current.dispose();
-            jitsiApiRef.current = null;
+          if (!isEndingRef.current) {
+            setSessionActive(false);
+            navigate(createPageUrl(`GDAnalysis?roomId=${roomId}`));
           }
-          navigate(createPageUrl('Dashboard'));
         }
       } catch {}
     };
+
     poll();
     timer = setInterval(poll, 3000);
     return () => clearInterval(timer);
@@ -78,7 +83,7 @@ export default function GDRoom() {
     try {
       const currentUser = await api.auth.me();
       setUser(currentUser);
-      
+
       const roomData = await api.entities.GDRoom.filter({ id: roomId });
       if (roomData.length > 0) {
         setRoom(roomData[0]);
@@ -88,54 +93,19 @@ export default function GDRoom() {
     }
   };
 
-  const initJitsi = () => {
-    const script = document.createElement('script');
-    script.src = 'https://meet.jit.si/external_api.js';
-    script.async = true;
-    script.onload = () => {
-      const domain = 'meet.jit.si';
-      const options = {
-        roomName: `GDHub_${room.room_code}`,
-        width: '100%',
-        height: '100%',
-        parentNode: jitsiContainerRef.current,
-        userInfo: {
-          displayName: user.full_name || 'Participant'
-        },
-        configOverwrite: {
-          startWithAudioMuted: false,
-          startWithVideoMuted: false,
-          prejoinPageEnabled: false,
-          disableDeepLinking: true,
-        },
-        interfaceConfigOverwrite: {
-          TOOLBAR_BUTTONS: [
-            'microphone', 'camera', 'desktop', 'fullscreen',
-            'hangup', 'chat', 'raisehand', 'tileview'
-          ],
-          SHOW_JITSI_WATERMARK: false,
-          SHOW_WATERMARK_FOR_GUESTS: false,
-          DEFAULT_BACKGROUND: '#1a1a2e',
-          DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
-        }
-      };
-
-      jitsiApiRef.current = new window.JitsiMeetExternalAPI(domain, options);
-      setJitsiLoaded(true);
-
-      jitsiApiRef.current.addListener('readyToClose', () => {
-        endSession();
-      });
-    };
-    document.body.appendChild(script);
+  const setVideoRef = (el, stream, isSelf = false) => {
+    if (!el || !stream) return;
+    try {
+      el.srcObject = stream;
+      if (isSelf) el.muted = true;
+      el.onloadedmetadata = () => el.play().catch(() => {});
+    } catch {}
   };
 
   const endSession = async () => {
     try {
-      if (jitsiApiRef.current) {
-        jitsiApiRef.current.dispose();
-        jitsiApiRef.current = null;
-      }
+      isEndingRef.current = true;
+      setSessionActive(false);
 
       if (!room) {
         navigate(createPageUrl('Dashboard'));
@@ -146,30 +116,13 @@ export default function GDRoom() {
       const amHost = user && (hostId === user.email || hostId === user.id);
 
       if (!amHost) {
-        // Non-hosts simply leave
-        navigate(createPageUrl('Dashboard'));
+        navigate(createPageUrl(`GDAnalysis?roomId=${room.id}`));
         return;
       }
 
-      // Host ends the room and records session
+      // Host ends the room and navigates to analysis
       await api.entities.GDRoom.update(room.id, { status: 'completed' });
-      const session = await api.entities.GDSession.create({
-        room_id: room.id,
-        room_code: room.room_code,
-        topic: room.topic,
-        domain: room.domain,
-        mode: room.mode,
-        duration: room.duration,
-        participants: room.participants?.map(p => ({
-          user_id: p.user_id,
-          name: p.name,
-          rating: 0,
-          liked: false,
-          is_friend: false
-        })) || [],
-        completed_at: new Date().toISOString()
-      });
-      navigate(createPageUrl(`GDAnalysis?sessionId=${session.id}`));
+      navigate(createPageUrl(`GDAnalysis?roomId=${room.id}`));
     } catch (error) {
       console.error('Error ending session:', error);
       navigate(createPageUrl('Dashboard'));
@@ -181,6 +134,13 @@ export default function GDRoom() {
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
+
+  const placeholderParticipants = (() => {
+    const others = (room?.participants || []).filter(p => p.user_id !== user?.email && p.user_id !== user?.id);
+    const remoteCount = Object.keys(remoteStreams || {}).length;
+    const missing = Math.max(0, (others.length) - remoteCount);
+    return others.slice(0, missing);
+  })();
 
   return (
     <div className="h-screen bg-gray-900 flex flex-col">
@@ -231,8 +191,70 @@ export default function GDRoom() {
         </p>
       </div>
 
-      {/* Jitsi Container */}
-      <div ref={jitsiContainerRef} className="flex-1" />
+      {/* WebRTC Video Grid */}
+      <div className="flex-1 p-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 bg-gray-900">
+        {/* Local */}
+        <div className="relative rounded-xl overflow-hidden bg-gray-800 aspect-video">
+          {localStream ? (
+            <video data-self="true" ref={el => setVideoRef(el, localStream, true)} playsInline autoPlay className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400">{mediaError ? 'Mic/Camera blocked' : 'Connecting camera...'}</div>
+          )}
+          <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded">You</div>
+        </div>
+
+        {/* Remotes */}
+        {Object.entries(remoteStreams || {}).map(([peerId, stream]) => (
+          <div key={peerId} className="relative rounded-xl overflow-hidden bg-gray-800 aspect-video">
+            <video ref={el => setVideoRef(el, stream)} playsInline autoPlay className="w-full h-full object-cover" />
+            <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded">{peerId}</div>
+          </div>
+        ))}
+        {/* Placeholders for participants without video yet */}
+        {placeholderParticipants.map((p, idx) => (
+          <div key={`ph-${idx}`} className="relative rounded-xl overflow-hidden bg-gray-800 aspect-video flex items-center justify-center">
+            <div className="text-center text-gray-300">
+              <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-gray-700 flex items-center justify-center text-white font-bold">
+                {p.name?.charAt(0) || '?'}
+              </div>
+              <div className="text-xs">{p.name || 'Waiting...'}</div>
+            </div>
+          </div>
+        ))}
+        {/* AI Judge Tile */}
+        <div className="relative rounded-xl overflow-hidden bg-gradient-to-br from-purple-700 to-indigo-700 aspect-video flex items-center justify-center">
+          <div className="flex flex-col items-center text-white">
+            <Bot className="w-10 h-10 mb-2" />
+            <span className="font-bold">AI Judge</span>
+          </div>
+          <div className="absolute top-2 right-2 text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full">Observer</div>
+        </div>
+      </div>
+
+      {/* Debug overlay */}
+      <div className="fixed right-3 top-24 z-40">
+        <button onClick={() => setShowDebug(!showDebug)} className="px-2 py-1 text-[11px] rounded bg-white/10 text-white border border-white/20">
+          {showDebug ? 'Hide Debug' : 'Show Debug'}
+        </button>
+        {showDebug && (
+          <div className="mt-2 text-xs p-3 rounded bg-black/70 text-white max-w-xs space-y-1">
+            <div><span className="opacity-70">socket:</span> {diagnostics?.socketId || '—'}</div>
+            <div><span className="opacity-70">peers:</span> {(diagnostics?.peers || []).join(', ') || '—'}</div>
+            <div><span className="opacity-70">remotes:</span> {(diagnostics?.remotes || []).join(', ') || '—'}</div>
+            <div><span className="opacity-70">last:</span> {diagnostics?.lastSignal ? `${diagnostics.lastSignal.type} from ${diagnostics.lastSignal.from}` : '—'}</div>
+            <div className="max-h-40 overflow-auto whitespace-pre-wrap break-all"><span className="opacity-70">pcs:</span> {JSON.stringify(diagnostics?.pcs || {}, null, 0)}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Controls */}
+      <div className="bg-gray-800 px-4 py-3 flex items-center gap-3 justify-center">
+        <button onClick={toggleMic} className={`px-3 py-2 rounded-lg text-sm font-bold ${micOn ? 'bg-green-600 text-white' : 'bg-gray-600 text-white'}`}>{micOn ? 'Mic On' : 'Mic Off'}</button>
+        <button onClick={toggleCamera} className={`px-3 py-2 rounded-lg text-sm font-bold ${cameraOn ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'}`}>{cameraOn ? 'Cam On' : 'Cam Off'}</button>
+        {mediaError && (
+          <button onClick={retryDevices} className="px-3 py-2 rounded-lg text-sm font-bold bg-yellow-600 text-white">Retry Devices</button>
+        )}
+      </div>
     </div>
   );
 }
