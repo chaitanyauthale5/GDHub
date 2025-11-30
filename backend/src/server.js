@@ -23,6 +23,7 @@ const AIInterview = require('./models/AIInterview');
 const ChatMessage = require('./models/ChatMessage');
 const ExtemporeTopic = require('./models/ExtemporeTopic');
 const SoloPracticeSession = require('./models/SoloPracticeSession');
+const AIInterviewSession = require('./models/AIInterviewSession');
 
 const authRoutes = require('./routes/auth');
 
@@ -63,6 +64,7 @@ app.use('/api/ai-interviews', createCrudRouter(AIInterview));
 app.use('/api/chat-messages', createCrudRouter(ChatMessage));
 app.use('/api/extempore-topics', createCrudRouter(ExtemporeTopic));
 app.use('/api/solo-practice-sessions', createCrudRouter(SoloPracticeSession));
+app.use('/api/ai-interview-sessions', createCrudRouter(AIInterviewSession));
 
 app.post('/api/friend-requests/:id/accept', async (req, res) => {
     const fr = await FriendRequest.findById(req.params.id);

@@ -1,4 +1,5 @@
 import { api } from '@/api/apiClient';
+import { analyzeInterview } from '@/api/geminiClient';
 import useVapi from '@/hooks/useVapi';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -7,7 +8,8 @@ import { createPageUrl } from '../utils';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Clock, LogOut, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
+import { ArrowLeft, Bot, Clock, LogOut, RefreshCcw, Volume2, VolumeX } from 'lucide-react';
+import TopNav from '../components/navigation/TopNav';
 
 export default function AIInterviewAI() {
   const navigate = useNavigate();
@@ -18,6 +20,7 @@ export default function AIInterviewAI() {
   const [interviewStarted, setInterviewStarted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [aiInterviewId, setAiInterviewId] = useState(null);
+  const [finalizingInterview, setFinalizingInterview] = useState(false);
 
   const [config, setConfig] = useState({
     interview_type: 'hr',
@@ -86,7 +89,9 @@ export default function AIInterviewAI() {
   };
 
   const endInterview = async () => {
-    // Stop the Vapi call if it's still active
+    if (finalizingInterview) return;
+    setFinalizingInterview(true);
+
     if (isSessionActive) {
       try {
         await stopCall();
@@ -95,41 +100,63 @@ export default function AIInterviewAI() {
       }
     }
 
-    // Generate analysis from the transcripted conversation
     setLoading(true);
 
-    const conversationText = conversation.map(m => `${m.role === 'ai' ? 'Interviewer' : 'Candidate'}: ${m.content}`).join('\n');
-    
-    const analysis = await api.integrations.Core.InvokeLLM({
-      prompt: `Analyze this interview conversation and provide feedback:
+    const messages = conversation.map(m => ({ role: m.role, content: m.content }));
+    const transcriptText = conversation
+      .map(m => `${m.role === 'ai' ? 'AI Interviewer' : 'You'}: ${m.content}`)
+      .join('\n');
 
-${conversationText}
+    let analysis = null;
+    try {
+      analysis = await analyzeInterview({
+        transcript: transcriptText,
+        interview_type: config.interview_type,
+        role: config.role,
+        company: config.company,
+        duration_minutes: Math.max(1, Math.round(timeElapsed / 60)),
+      });
+    } catch (error) {
+      console.error('Interview analysis failed:', error);
+    }
 
-Provide a detailed analysis.`,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          overall_score: { type: "number" },
-          strengths: { type: "array", items: { type: "string" } },
-          improvements: { type: "array", items: { type: "string" } },
-          communication_score: { type: "number" },
-          confidence_score: { type: "number" },
-          content_score: { type: "number" },
-          summary: { type: "string" }
-        }
-      }
-    });
+    try {
+      await api.entities.AIInterviewSession.create({
+        user_id: user?.id || user?.email || 'guest',
+        interview_type: config.interview_type,
+        company: config.company,
+        role: config.role,
+        transcript: transcriptText,
+        messages,
+        analysis: analysis || undefined,
+      });
+    } catch (sessionError) {
+      console.error('Failed to save AI interview session:', sessionError);
+    }
 
-    // Mark AIInterview completed for stats
     try {
       if (aiInterviewId) {
         await api.entities.AIInterview.update(aiInterviewId, { status: 'completed' });
       }
     } catch (e) {
-      // ignore
+      console.warn('Failed to update AI interview status:', e);
     }
 
-    navigate(createPageUrl(`AIInterviewAnalysis?data=${encodeURIComponent(JSON.stringify(analysis))}`));
+    if (analysis && typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        window.sessionStorage.setItem('aiInterviewAnalysisPayload', JSON.stringify({
+          analysis,
+          generatedAt: Date.now(),
+        }));
+      } catch (storageErr) {
+        console.warn('Unable to cache AI interview analysis:', storageErr);
+      }
+    }
+
+    setFinalizingInterview(false);
+    setLoading(false);
+
+    navigate(createPageUrl('AIInterviewAnalysis'), { state: { analysis } });
   };
 
   const formatTime = (seconds) => {
@@ -147,15 +174,16 @@ Provide a detailed analysis.`,
 
   if (!interviewStarted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 p-6">
-        <div className="max-w-xl mx-auto pt-20">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-cyan-50 to-white pb-16">
+        <TopNav activePage="Explore" user={user} />
+        <div className="max-w-xl mx-auto pt-16 px-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-3xl p-8 shadow-2xl"
+            className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100"
           >
             <div className="text-center mb-8">
-              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-green-400 to-teal-500 flex items-center justify-center">
+              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg">
                 <Bot className="w-10 h-10 text-white" />
               </div>
               <h1 className="text-3xl font-black mb-2">AI Voice Interview</h1>
@@ -201,9 +229,10 @@ Provide a detailed analysis.`,
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={startInterview}
-                className="w-full py-4 rounded-2xl bg-gradient-to-r from-green-400 to-teal-500 text-white font-bold text-lg shadow-xl"
+                disabled={loading}
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-400 to-cyan-500 text-white font-bold text-lg shadow-xl disabled:opacity-60"
               >
-                Start AI Interview
+                {loading ? 'Connecting…' : 'Start AI Interview'}
               </motion.button>
             </div>
           </motion.div>
@@ -213,92 +242,86 @@ Provide a detailed analysis.`,
   }
 
   return (
-    <div className="h-screen bg-gray-900 flex flex-col">
-      {/* Top Bar */}
-      <div className="bg-gradient-to-r from-green-600 to-teal-600 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate(-1)} className="text-white/80 hover:text-white">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div className="flex items-center gap-2">
-            <Bot className="w-6 h-6 text-white" />
-            <span className="text-white font-bold">AI Interview</span>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-black/30 px-4 py-2 rounded-full">
-            <Clock className="w-5 h-5 text-white" />
-            <span className="font-mono font-bold text-lg text-white">{formatTime(timeElapsed)}</span>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 pb-16">
+      <TopNav activePage="Explore" user={user} />
+
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
+        <div className="flex items-center justify-between mb-4 text-white/90">
           <button
-            onClick={endInterview}
-            className="px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold flex items-center gap-2"
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 text-sm font-semibold hover:text-white"
           >
-            <LogOut className="w-5 h-5" />
-            End Interview
+            <ArrowLeft className="w-4 h-4" /> Back
           </button>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col p-6 overflow-hidden">
-        {/* AI Avatar */}
-        <div className="flex justify-center mb-6">
-          <motion.div
-            animate={isSpeaking ? { scale: [1, 1.1, 1] } : {}}
-            transition={{ repeat: Infinity, duration: 0.5 }}
-            className="w-24 h-24 rounded-full bg-gradient-to-br from-green-400 to-teal-500 flex items-center justify-center shadow-2xl"
-          >
-            <Bot className="w-12 h-12 text-white" />
-          </motion.div>
+          <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl">
+            <Clock className="w-5 h-5" />
+            <span className="font-mono text-lg">{formatTime(timeElapsed)}</span>
+          </div>
         </div>
 
-        {/* Conversation */}
-        <div className="mb-6 h-[400px] overflow-y-auto">
-          <div
-            className="rounded-3xl p-5 bg-white border-2 border-gray-100 shadow-inner text-sm text-gray-800 whitespace-pre-wrap"
-          >
-            {conversation.length === 0 && !loading && (
-              <span className="text-gray-400">Your live transcript will appear here as you speak.</span>
-            )}
-            {conversation.length > 0 && (
-              conversation.map((msg, index) => (
-                <p key={index} className="mb-2">
-                  <span className="font-semibold">
-                    {msg.role === 'ai' ? 'AI Interviewer' : 'You'}:
-                  </span>{' '}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white/10 border border-white/10 rounded-3xl p-6 backdrop-blur"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div>
+              <p className="text-sm uppercase tracking-widest text-emerald-200 font-semibold">Live Interview</p>
+              <h2 className="text-2xl font-black text-white">{config.role}</h2>
+              <p className="text-sm text-white/70">{config.company || 'Practice company'} • {config.interview_type.toUpperCase()} round</p>
+            </div>
+            <button
+              onClick={endInterview}
+              disabled={finalizingInterview || !conversation.length}
+              className="px-5 py-3 rounded-2xl bg-red-500 text-white font-bold flex items-center gap-2 hover:bg-red-600 disabled:opacity-50"
+            >
+              <LogOut className="w-5 h-5" />
+              {finalizingInterview ? 'Finishing…' : 'End Interview'}
+            </button>
+          </div>
+
+          <div className="grid gap-6">
+            <div className="rounded-3xl bg-white text-gray-900 p-5 shadow-inner border border-gray-100 h-[320px] overflow-y-auto">
+              {conversation.length === 0 && !loading && (
+                <p className="text-gray-400 text-sm">Your live transcript will appear here as you and the interviewer speak.</p>
+              )}
+              {conversation.length > 0 && conversation.map((msg, index) => (
+                <p key={index} className="mb-2 text-sm">
+                  <span className="font-semibold text-gray-800">{msg.role === 'ai' ? 'AI Interviewer' : 'You'}:</span>{' '}
                   {msg.content}
                 </p>
-              ))
-            )}
-            {loading && (
-              <div className="mt-2 flex gap-1">
-                <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></span>
-                <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></span>
-                <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
-              </div>
-            )}
-            <div ref={chatEndRef} />
+              ))}
+              {loading && (
+                <div className="mt-3 flex gap-1">
+                  <span className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"></span>
+                  <span className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></span>
+                  <span className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 items-center">
+              <button
+                onClick={() => setAiMuted(!aiMuted)}
+                className={`w-full sm:w-auto px-5 py-3 rounded-2xl flex items-center justify-center gap-2 font-semibold ${aiMuted ? 'bg-red-500 text-white' : 'bg-white/10 text-white'} transition-all`}
+              >
+                {aiMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                {aiMuted ? 'AI Muted' : 'Mute AI'}
+              </button>
+
+              <button
+                onClick={toggleCall}
+                className={`flex-1 sm:flex-none px-6 py-3 rounded-2xl font-bold text-white flex items-center justify-center gap-3 shadow-lg transition-all ${
+                  isSessionActive ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'
+                }`}
+              >
+                <RefreshCcw className="w-5 h-5" />
+                {isSessionActive ? 'Reconnect' : 'Start Call'}
+              </button>
+            </div>
           </div>
-        </div>
-
-        {/* Controls */}
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => setAiMuted(!aiMuted)}
-            className={`p-4 rounded-full ${aiMuted ? 'bg-red-500' : 'bg-gray-700'} text-white`}
-          >
-            {aiMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
-          </button>
-
-          <button
-            onClick={toggleCall}
-            className={`p-6 rounded-full ${isSessionActive ? 'bg-red-500 animate-pulse' : 'bg-green-500'} text-white shadow-xl`}
-          >
-            {isSessionActive ? <MicOff className="w-8 h-8" /> : <Mic className="w-8 h-8" />}
-          </button>
-        </div>
+        </motion.div>
       </div>
     </div>
   );

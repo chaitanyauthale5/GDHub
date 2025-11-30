@@ -1,6 +1,6 @@
 import { api } from '@/api/apiClient';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 
 import { motion } from 'framer-motion';
@@ -8,7 +8,8 @@ import { AlertCircle, Bot, CheckCircle, Home, MessageSquare, Mic, RotateCcw, Tre
 import TopNav from '../components/navigation/TopNav';
 
 export default function SoloAnalysis() {
-  const [analysis, setAnalysis] = useState(null);
+  const location = useLocation();
+  const [analysis, setAnalysis] = useState(location.state?.analysis || null);
   const [loading, setLoading] = useState(true);
   const [topic, setTopic] = useState('');
   const [messages, setMessages] = useState([]);
@@ -20,6 +21,35 @@ export default function SoloAnalysis() {
     const messagesParam = urlParams.get('messages');
     
     setTopic(topicParam || 'General Practice');
+
+    const useAnalysisPayload = (payload) => {
+      if (!payload?.analysis) return false;
+      setAnalysis(payload.analysis);
+      setLoading(false);
+      return true;
+    };
+
+    if (location.state?.analysis) {
+      if (useAnalysisPayload({ analysis: location.state.analysis })) {
+        return;
+      }
+    }
+
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      const cached = window.sessionStorage.getItem('soloAnalysisPayload');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          const topicMatches = !parsed.topic || !topicParam || parsed.topic === topicParam;
+          if (topicMatches && useAnalysisPayload(parsed)) {
+            window.sessionStorage.removeItem('soloAnalysisPayload');
+            return;
+          }
+        } catch (e) {
+          console.warn('Invalid solo analysis cache:', e);
+        }
+      }
+    }
     try {
       const parsedMessages = JSON.parse(messagesParam || '[]');
       setMessages(parsedMessages);
@@ -31,7 +61,7 @@ export default function SoloAnalysis() {
     } catch (e) {
       setLoading(false);
     }
-  }, []);
+  }, [location.state]);
 
   const generateAnalysis = async (topicData, messagesData) => {
     try {

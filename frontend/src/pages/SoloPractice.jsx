@@ -1,7 +1,7 @@
 import { analyzeTranscript } from '@/api/geminiClient';
 import useVapi from '@/hooks/useVapi';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, Bot, Edit3, Mic, MicOff } from 'lucide-react';
+import { ArrowLeft, Bot, Edit3, RefreshCcw, Shuffle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TopNav from '../components/navigation/TopNav';
@@ -17,11 +17,49 @@ export default function SoloPractice() {
   const [loading, setLoading] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [analysisLoading, setAnalysisLoading] = useState(false);
-  const [analysis, setAnalysis] = useState(null);
+  const [finalizingSession, setFinalizingSession] = useState(false);
   
   const chatEndRef = useRef(null);
-  
+
+  const topicPool = [
+    "Tell me about yourself and your career goals",
+    "What are the advantages and disadvantages of remote work?",
+    "How can technology improve education?",
+    "Discuss the importance of work-life balance",
+    "What qualities make a good leader?",
+    "How should we address climate change?",
+    "Describe a challenge you overcame and what you learned",
+    "Should social media be regulated?",
+    "The future of artificial intelligence in daily life",
+    "How to maintain mental health in a busy world",
+    "Is space tourism worth the investment?",
+    "How can cities become more sustainable?",
+    "What habits build lifelong learning?",
+    "Debate the pros and cons of universal basic income",
+    "How do we balance privacy with public safety?",
+    "What role should art play in modern society?",
+    "How will quantum computing change the world?",
+    "Tips for mastering public speaking nerves",
+    "What makes a brand truly trustworthy?",
+    "How do esports reshape entertainment?",
+    "Should schools prioritize creativity over exams?",
+    "How can communities combat loneliness?",
+    "Describe your ideal future workplace",
+    "What innovations will transform healthcare next?",
+    "How can storytelling influence leadership?",
+  ];
+
+  const getRandomTopics = (pool, count = 8) => {
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count);
+  };
+
+  const [practiceTopics, setPracticeTopics] = useState(() => getRandomTopics(topicPool));
+
+  const refreshTopics = () => {
+    setPracticeTopics(getRandomTopics(topicPool));
+  };
+
   const {
     volumeLevel,
     isSessionActive,
@@ -33,19 +71,6 @@ export default function SoloPractice() {
     publicKey: import.meta.env.VITE_VAPI_PRACTICE_PUBLIC_KEY,
     assistantId: import.meta.env.VITE_VAPI_PRACTICE_ASSISTANT_ID,
   });
-
-  const practiceTopics = [
-    "Tell me about yourself and your career goals",
-    "What are the advantages and disadvantages of remote work?",
-    "How can technology improve education?",
-    "Discuss the importance of work-life balance",
-    "What qualities make a good leader?",
-    "How should we address climate change?",
-    "Describe a challenge you overcame and what you learned",
-    "Should social media be regulated?",
-    "The future of artificial intelligence in daily life",
-    "How to maintain mental health in a busy world"
-  ];
 
   useEffect(() => {
     loadUser();
@@ -92,6 +117,9 @@ export default function SoloPractice() {
   };
 
   const endSession = async () => {
+    if (finalizingSession) return;
+    setFinalizingSession(true);
+
     // Stop Vapi call if active
     if (isSessionActive) {
       try {
@@ -107,6 +135,13 @@ export default function SoloPractice() {
       .map(m => `${m.role === 'ai' ? 'AI Coach' : 'You'}: ${m.content}`)
       .join('\n');
 
+    let localAnalysis = null;
+    try {
+      localAnalysis = await analyzeTranscript({ transcript: transcriptText, topic: currentTopic });
+    } catch (analysisError) {
+      console.error('Local analysis failed:', analysisError);
+    }
+
     try {
       const { api } = await import('@/api/apiClient');
       await api.entities.SoloPracticeSession.create({
@@ -119,7 +154,29 @@ export default function SoloPractice() {
       console.error('Error saving solo practice session:', e);
     }
 
-    navigate(createPageUrl(`SoloAnalysis?topic=${encodeURIComponent(currentTopic)}&messages=${encodeURIComponent(JSON.stringify(messages))}`));
+    if (localAnalysis && typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        window.sessionStorage.setItem('soloAnalysisPayload', JSON.stringify({
+          topic: currentTopic,
+          analysis: localAnalysis,
+          generatedAt: Date.now(),
+        }));
+      } catch (storageError) {
+        console.warn('Unable to cache analysis for SoloAnalysis page:', storageError);
+      }
+    }
+
+    navigate(
+      createPageUrl(`SoloAnalysis?topic=${encodeURIComponent(currentTopic)}&messages=${encodeURIComponent(JSON.stringify(messages))}`),
+      { state: { analysis: localAnalysis || null } }
+    );
+
+    setFinalizingSession(false);
+  };
+
+  const handleAnalyzeClick = async () => {
+    if (!conversation.length || finalizingSession) return;
+    await endSession();
   };
 
   const copyTranscript = async () => {
@@ -182,13 +239,22 @@ export default function SoloPractice() {
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-3xl p-6 shadow-xl border-2 border-gray-100 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold">Choose a Topic</h2>
-                <button
-                  onClick={() => setShowCustomInput(!showCustomInput)}
-                  className="px-4 py-2 rounded-xl bg-purple-100 text-purple-700 font-bold text-sm flex items-center gap-2 hover:bg-purple-200 transition-all"
-                >
-                  <Edit3 className="w-4 h-4" />
-                  Custom Topic
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={refreshTopics}
+                    className="px-4 py-2 rounded-xl bg-cyan-100 text-cyan-700 font-bold text-sm flex items-center gap-2 hover:bg-cyan-200 transition-all"
+                  >
+                    <Shuffle className="w-4 h-4" />
+                    Shuffle
+                  </button>
+                  <button
+                    onClick={() => setShowCustomInput(!showCustomInput)}
+                    className="px-4 py-2 rounded-xl bg-purple-100 text-purple-700 font-bold text-sm flex items-center gap-2 hover:bg-purple-200 transition-all"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    Custom Topic
+                  </button>
+                </div>
               </div>
 
               <AnimatePresence>
@@ -240,9 +306,10 @@ export default function SoloPractice() {
                 </div>
                 <button
                   onClick={endSession}
-                  className="px-4 py-2 rounded-xl bg-red-100 text-red-600 font-bold hover:bg-red-200 transition-all"
+                  disabled={finalizingSession}
+                  className="px-4 py-2 rounded-xl bg-red-100 text-red-600 font-bold hover:bg-red-200 transition-all disabled:opacity-60"
                 >
-                  End Session
+                  {finalizingSession ? 'Ending...' : 'End Session'}
                 </button>
               </div>
             </motion.div>
@@ -287,66 +354,6 @@ export default function SoloPractice() {
               </div>
             </div>
 
-            {/* Analysis Box */}
-            <div className="mb-6">
-              <div className="rounded-3xl p-5 bg-white border-2 border-gray-100 shadow-xl">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-bold text-gray-900">AI Communication Analysis</h3>
-                  <button
-                    type="button"
-                    onClick={analyzeNow}
-                    disabled={analysisLoading || !conversation.length}
-                    className="text-sm px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 text-white font-bold disabled:opacity-50"
-                  >
-                    {analysisLoading ? 'Analyzing...' : 'Analyze'}
-                  </button>
-                </div>
-                {!analysis && (
-                  <p className="text-sm text-gray-600">Click Analyze to get a summary and improvement tips based on your transcript.</p>
-                )}
-                {analysis && (
-                  <div className="space-y-4 text-sm text-gray-800">
-                    <div>
-                      <p className="font-semibold mb-1">Summary</p>
-                      <p className="text-gray-700">{analysis.summary || '—'}</p>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="p-3 rounded-2xl bg-green-50 border border-green-200">
-                        <p className="font-semibold text-green-700 mb-2">What You Did Well</p>
-                        <ul className="list-disc ml-5 space-y-1">
-                          {(analysis.strengths || []).length ? (
-                            (analysis.strengths || []).map((s, i) => <li key={i}>{s}</li>)
-                          ) : (
-                            <li>No items</li>
-                          )}
-                        </ul>
-                      </div>
-                      <div className="p-3 rounded-2xl bg-orange-50 border border-orange-200">
-                        <p className="font-semibold text-orange-700 mb-2">Areas to Work On</p>
-                        <ul className="list-disc ml-5 space-y-1">
-                          {(analysis.improvements || []).length ? (
-                            (analysis.improvements || []).map((s, i) => <li key={i}>{s}</li>)
-                          ) : (
-                            <li>No items</li>
-                          )}
-                        </ul>
-                      </div>
-                    </div>
-                    <div className="p-3 rounded-2xl bg-indigo-50 border border-indigo-200">
-                      <p className="font-semibold text-indigo-700 mb-2">Recommended Exercises</p>
-                      <ul className="list-disc ml-5 space-y-1">
-                        {(analysis.suggestions || []).length ? (
-                          (analysis.suggestions || []).map((s, i) => <li key={i}>{s}</li>)
-                        ) : (
-                          <li>No items</li>
-                        )}
-                      </ul>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* Input Area with Vapi Voice */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-3xl p-4 shadow-xl border-2 border-gray-100 sticky bottom-4">
               <div className="flex items-center gap-4">
@@ -359,11 +366,11 @@ export default function SoloPractice() {
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  {isSessionActive ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+                  <RefreshCcw className="w-6 h-6" />
                 </button>
                 <div className="flex-1">
-                  <p className="text-sm text-gray-700 font-medium">Talk with your AI Voice Coach</p>
-                  <p className="text-xs text-gray-500">Use your microphone to practice speaking. Transcripts will appear above.</p>
+                  <p className="text-sm text-gray-700 font-medium">Restart your AI Voice Coach session</p>
+                  <p className="text-xs text-gray-500">Tap the button above to reconnect with the coach and continue practicing.</p>
                 </div>
               </div>
             </motion.div>

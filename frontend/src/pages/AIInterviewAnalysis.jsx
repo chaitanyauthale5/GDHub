@@ -1,16 +1,31 @@
 import { motion } from 'framer-motion';
 import { Bot, CheckCircle, Home, TrendingUp } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
 import { createPageUrl } from '../utils';
 
 export default function AIInterviewAnalysis() {
   const navigate = useNavigate();
-  const [analysis, setAnalysis] = useState(null);
+  const location = useLocation();
+  const [analysis, setAnalysis] = useState(location.state?.analysis || null);
 
   useEffect(() => {
+    if (location.state?.analysis) return;
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      const cached = window.sessionStorage.getItem('aiInterviewAnalysisPayload');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (parsed?.analysis) {
+            setAnalysis(parsed.analysis);
+            window.sessionStorage.removeItem('aiInterviewAnalysisPayload');
+            return;
+          }
+        } catch {}
+      }
+    }
     const urlParams = new URLSearchParams(window.location.search);
     const data = urlParams.get('data');
     if (data) {
@@ -20,7 +35,7 @@ export default function AIInterviewAnalysis() {
         console.error('Error parsing analysis data:', e);
       }
     }
-  }, []);
+  }, [location.state]);
 
   if (!analysis) {
     return (
@@ -66,10 +81,10 @@ export default function AIInterviewAnalysis() {
           transition={{ delay: 0.2 }}
           className="mb-8"
         >
-          <ClayCard className={`bg-gradient-to-br ${getScoreBg(analysis.overall_score)} text-white text-center py-12`}>
-            <p className="text-lg font-medium mb-2 text-white/80">Overall Score</p>
-            <p className="text-7xl font-black">{analysis.overall_score || 75}</p>
-            <p className="text-xl mt-2">out of 100</p>
+          <ClayCard className={`bg-gradient-to-br ${getScoreBg(analysis.overall_score)} text-center py-12`}>
+            <p className="text-lg font-semibold mb-2 text-gray-800">Overall Score</p>
+            <p className="text-7xl font-black text-gray-900">{analysis.overall_score || 75}</p>
+            <p className="text-xl mt-2 text-gray-800">out of 100</p>
           </ClayCard>
         </motion.div>
 
