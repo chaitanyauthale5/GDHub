@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { createPageUrl } from '../utils';
 import { motion } from 'framer-motion';
-import { Bot, CheckCircle, AlertCircle, TrendingUp, ArrowLeft, Home } from 'lucide-react';
+import { Bot, CheckCircle, Home, TrendingUp } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
+import { createPageUrl } from '../utils';
 
 export default function AIInterviewAnalysis() {
   const navigate = useNavigate();

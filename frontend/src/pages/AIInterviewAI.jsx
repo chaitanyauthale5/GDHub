@@ -228,10 +228,9 @@ Provide a detailed analysis.`,
         </div>
 
         {/* Conversation */}
-        <div className="flex-1 overflow-y-auto mb-6">
+        <div className="mb-6 h-[400px] overflow-y-auto">
           <div
-            className="w-full h-full bg-gray-800/80 rounded-2xl p-4 text-sm text-white whitespace-pre-wrap"
-            ref={chatEndRef}
+            className="rounded-3xl p-5 bg-white border-2 border-gray-100 shadow-inner text-sm text-gray-800 whitespace-pre-wrap"
           >
             {conversation.length === 0 && !loading && (
               <span className="text-gray-400">Your live transcript will appear here as you speak.</span>
@@ -248,11 +247,12 @@ Provide a detailed analysis.`,
             )}
             {loading && (
               <div className="mt-2 flex gap-1">
-                <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce"></span>
+                <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></span>
+                <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
               </div>
             )}
+            <div ref={chatEndRef} />
           </div>
         </div>
 

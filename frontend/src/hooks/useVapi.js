@@ -43,7 +43,13 @@ const useVapi = (options = {}) => {
                     const role = message.role === 'assistant' ? 'ai' : 'user';
                     const text = message.transcript || '';
                     if (!text) return;
-                    setConversation((prev) => [...prev, { role, content: text }]);
+                    setConversation((prev) => {
+                        if (prev.length > 0 && prev[prev.length - 1].role === role) {
+                            const last = prev[prev.length - 1];
+                            return [...prev.slice(0, -1), { ...last, content: (last.content + ' ' + text).trim() }];
+                        }
+                        return [...prev, { role, content: text }];
+                    });
                 }
             });
 

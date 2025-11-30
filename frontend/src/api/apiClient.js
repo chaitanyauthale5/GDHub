@@ -50,6 +50,7 @@ const entityToPath = {
   AIInterview: '/api/ai-interviews',
   ChatMessage: '/api/chat-messages',
   ExtemporeTopic: '/api/extempore-topics',
+  SoloPracticeSession: '/api/solo-practice-sessions',
 };
 
 const makeEntity = (path) => ({
@@ -107,6 +108,7 @@ const entities = {
   AIInterview: makeEntity(entityToPath.AIInterview),
   ChatMessage: makeEntity(entityToPath.ChatMessage),
   ExtemporeTopic: makeEntity(entityToPath.ExtemporeTopic),
+  SoloPracticeSession: makeEntity(entityToPath.SoloPracticeSession),
 };
 
 function ensureGuest() {

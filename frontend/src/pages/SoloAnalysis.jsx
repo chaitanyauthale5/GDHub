@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { api } from '@/api/apiClient';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { api } from '@/api/apiClient';
 
 import { motion } from 'framer-motion';
-import { Award, TrendingUp, AlertCircle, CheckCircle, Bot, Mic, MessageSquare, Home, RotateCcw } from 'lucide-react';
+import { AlertCircle, Bot, CheckCircle, Home, MessageSquare, Mic, RotateCcw, TrendingUp } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
 
 export default function SoloAnalysis() {

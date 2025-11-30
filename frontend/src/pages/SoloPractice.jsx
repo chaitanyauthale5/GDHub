@@ -1,3 +1,4 @@
+import { analyzeTranscript } from '@/api/geminiClient';
 import useVapi from '@/hooks/useVapi';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, Bot, Edit3, Mic, MicOff } from 'lucide-react';
@@ -15,6 +16,9 @@ export default function SoloPractice() {
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysis, setAnalysis] = useState(null);
   
   const chatEndRef = useRef(null);
   
@@ -98,7 +102,55 @@ export default function SoloPractice() {
     }
 
     const messages = conversation.map(m => ({ role: m.role, content: m.content }));
+
+    const transcriptText = conversation
+      .map(m => `${m.role === 'ai' ? 'AI Coach' : 'You'}: ${m.content}`)
+      .join('\n');
+
+    try {
+      const { api } = await import('@/api/apiClient');
+      await api.entities.SoloPracticeSession.create({
+        user_id: user?.id || user?.email || 'guest',
+        topic: currentTopic,
+        transcript: transcriptText,
+        messages,
+      });
+    } catch (e) {
+      console.error('Error saving solo practice session:', e);
+    }
+
     navigate(createPageUrl(`SoloAnalysis?topic=${encodeURIComponent(currentTopic)}&messages=${encodeURIComponent(JSON.stringify(messages))}`));
+  };
+
+  const copyTranscript = async () => {
+    if (!conversation.length) return;
+    const text = conversation
+      .map(m => `${m.role === 'ai' ? 'AI Coach' : 'You'}: ${m.content}`)
+      .join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      console.error('Failed to copy transcript:', e);
+    }
+  };
+
+  const analyzeNow = async () => {
+    if (!conversation.length || analysisLoading) return;
+    setAnalysisLoading(true);
+    try {
+      const transcriptText = conversation
+        .map(m => `${m.role === 'ai' ? 'AI Coach' : 'You'}: ${m.content}`)
+        .join('\n');
+      const result = await analyzeTranscript({ transcript: transcriptText, topic: currentTopic });
+      setAnalysis(result);
+    } catch (e) {
+      console.error('Analysis failed:', e);
+      setAnalysis({ summary: 'Analysis failed. Please try again.', strengths: [], improvements: [], suggestions: [] });
+    } finally {
+      setAnalysisLoading(false);
+    }
   };
 
   return (
@@ -198,6 +250,17 @@ export default function SoloPractice() {
             {/* Conversation (from Vapi transcripts) */}
             <div className="mb-6 h-[400px] overflow-y-auto">
               <div className="rounded-3xl p-5 bg-white border-2 border-gray-100 shadow-inner text-sm text-gray-800 whitespace-pre-wrap">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="font-semibold text-gray-800">Session Transcript</p>
+                  <button
+                    type="button"
+                    onClick={copyTranscript}
+                    disabled={!conversation.length}
+                    className="text-xs px-3 py-1 rounded-full border border-cyan-300 text-cyan-700 font-semibold disabled:opacity-50"
+                  >
+                    {copied ? 'Copied' : 'Copy all'}
+                  </button>
+                </div>
                 {conversation.length === 0 && !loading && (
                   <p className="text-gray-400">
                     Your conversation transcript with the AI Coach will appear here.
@@ -221,6 +284,66 @@ export default function SoloPractice() {
                   </div>
                 )}
                 <div ref={chatEndRef} />
+              </div>
+            </div>
+
+            {/* Analysis Box */}
+            <div className="mb-6">
+              <div className="rounded-3xl p-5 bg-white border-2 border-gray-100 shadow-xl">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-bold text-gray-900">AI Communication Analysis</h3>
+                  <button
+                    type="button"
+                    onClick={analyzeNow}
+                    disabled={analysisLoading || !conversation.length}
+                    className="text-sm px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 text-white font-bold disabled:opacity-50"
+                  >
+                    {analysisLoading ? 'Analyzing...' : 'Analyze'}
+                  </button>
+                </div>
+                {!analysis && (
+                  <p className="text-sm text-gray-600">Click Analyze to get a summary and improvement tips based on your transcript.</p>
+                )}
+                {analysis && (
+                  <div className="space-y-4 text-sm text-gray-800">
+                    <div>
+                      <p className="font-semibold mb-1">Summary</p>
+                      <p className="text-gray-700">{analysis.summary || '—'}</p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="p-3 rounded-2xl bg-green-50 border border-green-200">
+                        <p className="font-semibold text-green-700 mb-2">What You Did Well</p>
+                        <ul className="list-disc ml-5 space-y-1">
+                          {(analysis.strengths || []).length ? (
+                            (analysis.strengths || []).map((s, i) => <li key={i}>{s}</li>)
+                          ) : (
+                            <li>No items</li>
+                          )}
+                        </ul>
+                      </div>
+                      <div className="p-3 rounded-2xl bg-orange-50 border border-orange-200">
+                        <p className="font-semibold text-orange-700 mb-2">Areas to Work On</p>
+                        <ul className="list-disc ml-5 space-y-1">
+                          {(analysis.improvements || []).length ? (
+                            (analysis.improvements || []).map((s, i) => <li key={i}>{s}</li>)
+                          ) : (
+                            <li>No items</li>
+                          )}
+                        </ul>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-2xl bg-indigo-50 border border-indigo-200">
+                      <p className="font-semibold text-indigo-700 mb-2">Recommended Exercises</p>
+                      <ul className="list-disc ml-5 space-y-1">
+                        {(analysis.suggestions || []).length ? (
+                          (analysis.suggestions || []).map((s, i) => <li key={i}>{s}</li>)
+                        ) : (
+                          <li>No items</li>
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
