@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
-import { Trophy, ArrowLeft, Users, Clock, Building2, Globe, Lock, Calendar } from 'lucide-react';
+import { Trophy, ArrowLeft, Users, Clock, Building2, Globe, Lock, Calendar, Upload, X } from 'lucide-react';
+
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
 import { Input } from '@/components/ui/input';
@@ -17,6 +18,8 @@ export default function CreateTournament() {
   
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [csvParticipants, setCsvParticipants] = useState([]);
+  const [groupsCount, setGroupsCount] = useState('');
   
   const [formData, setFormData] = useState({
     name: '',
@@ -75,13 +78,49 @@ export default function CreateTournament() {
         host_name: user.full_name
       });
 
-      alert(`Tournament created successfully!\nTournament ID: ${tournamentId}\nShare this ID with participants.`);
+      // If CSV participants provided, create registrations and assign groups
+      if (csvParticipants.length > 0) {
+        // Shuffle participants
+        const shuffled = [...csvParticipants].sort(() => Math.random() - 0.5);
+        const groupSize = formData.group_size || 4;
+        const total = shuffled.length;
+        const groups = Math.max(1, groupsCount ? parseInt(groupsCount) : Math.ceil(total / groupSize));
+        // Assign group numbers 1..groups in round-robin
+        const creations = shuffled.map((p, idx) => {
+          const group_number = (idx % groups) + 1;
+          const user_id = p.email || p.user_id || p.id || String(idx);
+          const user_name = p.name || p.full_name || p.user_name || '';
+          const payload = { tournament_id: tournament.tournament_id, user_id, user_name, status: 'registered', group_number };
+          return api.entities.TournamentRegistration.create(payload);
+        });
+        await Promise.all(creations);
+      }
+
+      alert(`Tournament created successfully!\nTournament ID: ${tournamentId}\n${csvParticipants.length > 0 ? `${csvParticipants.length} participants registered.` : 'Share this ID with participants.'}`);
       navigate(createPageUrl(`TournamentHub?type=${tournamentType}`));
     } catch (error) {
       console.error('Error creating tournament:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const parseCSV = async (file) => {
+    const text = await file.text();
+    // Basic CSV parse: header first row: name,email,phone (any order)
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    if (lines.length === 0) { setCsvParticipants([]); return; }
+    const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const nameIdx = header.findIndex(h => ['name','full_name','student_name'].includes(h));
+    const emailIdx = header.findIndex(h => ['email','mail','email_id'].includes(h));
+    const phoneIdx = header.findIndex(h => ['phone','phone_number','mobile','mobile_number'].includes(h));
+    const rows = lines.slice(1).map((line) => line.split(',')).filter(r => r.some(x => x && x.trim() !== ''));
+    const participants = rows.map(cols => ({
+      name: nameIdx >= 0 ? (cols[nameIdx] || '').trim() : '',
+      email: emailIdx >= 0 ? (cols[emailIdx] || '').trim() : '',
+      phone: phoneIdx >= 0 ? (cols[phoneIdx] || '').trim() : ''
+    })).filter(p => p.email);
+    setCsvParticipants(participants);
   };
 
   const domains = ['General', 'Technology', 'Business', 'Education', 'Healthcare', 'Environment', 'Politics', 'Sports'];
@@ -262,6 +301,40 @@ export default function CreateTournament() {
                 onChange={(e) => setFormData({...formData, max_participants: parseInt(e.target.value)})}
                 className="clay-card border-none h-12"
               />
+            </div>
+
+            {/* Bulk Upload Students */}
+            <div className="clay-card p-4">
+              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                <Upload className="w-5 h-5 text-green-600" />
+                Bulk Upload Students (CSV)
+              </label>
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) parseCSV(file);
+                }}
+                className="block w-full text-sm text-gray-600"
+              />
+              {csvParticipants.length > 0 && (
+                <div className="mt-3 p-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-700 flex items-center justify-between">
+                  <span>{csvParticipants.length} students parsed from CSV</span>
+                  <button onClick={() => setCsvParticipants([])} className="flex items-center gap-1 text-green-800 hover:underline"><X className="w-4 h-4" /> Clear</button>
+                </div>
+              )}
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm text-gray-700">Group Size (people per group)</label>
+                  <Input type="number" value={formData.group_size} onChange={(e) => setFormData({ ...formData, group_size: parseInt(e.target.value || '0') })} className="clay-card border-none h-10 mt-1" />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-700">Or Number of Groups (optional)</label>
+                  <Input type="number" value={groupsCount} onChange={(e) => setGroupsCount(e.target.value)} placeholder="e.g., 10" className="clay-card border-none h-10 mt-1" />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">We will randomly assign uploaded students into groups based on the group size or groups count.</p>
             </div>
           </div>
 

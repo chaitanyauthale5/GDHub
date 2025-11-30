@@ -13,6 +13,9 @@ export default function Leaderboard() {
   const [users, setUsers] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [myProfile, setMyProfile] = useState(null);
+  const [pendingOut, setPendingOut] = useState([]); // requests I've sent
+  const [pendingIn, setPendingIn] = useState([]);  // requests to me
 
   useEffect(() => {
     loadData();
@@ -24,11 +27,26 @@ export default function Leaderboard() {
 
       setCurrentUser(user);
 
+      // Load my profile for friend list
+      if (user) {
+        let mine = await api.entities.UserProfile.filter({ user_id: user.email });
+        if (mine.length === 0) {
+          mine = await api.entities.UserProfile.filter({ user_id: user.id });
+        }
+        if (mine.length > 0) setMyProfile(mine[0]); else setMyProfile(null);
+
+        // Pending friend requests
+        const out = await api.entities.FriendRequest.filter({ from_user_id: user.email, status: 'pending' });
+        const inn = await api.entities.FriendRequest.filter({ to_user_id: user.email, status: 'pending' });
+        setPendingOut(out || []);
+        setPendingIn(inn || []);
+      }
+
       const [allProfiles, allUsers] = await Promise.all([
         api.entities.UserProfile.list('-xp_points', 20),
         api.entities.User.list()
       ]);
-      
+
       const userMap = {};
       allUsers.forEach(u => { userMap[u.id] = u; userMap[u.email] = u; });
       setUsers(userMap);
@@ -122,6 +140,24 @@ export default function Leaderboard() {
     setSelectedUser(null);
   };
 
+  const getTargetEmail = (userId) => {
+    const target = users[userId] || users[(users[userId]?.email)];
+    return (users[userId]?.email) || (target?.email) || userId;
+  };
+
+  const isAlreadyFriend = (userId) => {
+    const email = getTargetEmail(userId);
+    const f = myProfile?.friends || [];
+    return f.includes(email) || f.includes(userId);
+  };
+
+  const isPendingWith = (userId) => {
+    const email = getTargetEmail(userId);
+    const out = pendingOut.some(r => r.to_user_id === email);
+    const inn = pendingIn.some(r => r.from_user_id === email);
+    return { out, inn };
+  };
+
   return (
     <div className="min-h-screen pb-20">
       <TopNav activePage="Leaderboard" user={profiles.find(p => p.user_id === currentUser?.id)} />
@@ -171,7 +207,7 @@ export default function Leaderboard() {
                       transition={{ delay: 0.5, type: "spring" }}
                       className="absolute -top-6 sm:-top-8 left-1/2 -translate-x-1/2 z-10"
                     >
-                      <Crown className="w-8 h-8 sm:w-10 sm:h-10 text-yellow-400 drop-shadow-lg" fill="#facc15" />
+                      <Crown className="w-8 h-8 text-yellow-400" fill="#facc15" />
                     </motion.div>
                   )}
                   
@@ -316,13 +352,44 @@ export default function Leaderboard() {
                         <Eye className="w-4 h-4" />
                         View Profile
                       </button>
-                      <button
-                        onClick={() => handleAddFriend(profile.user_id)}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-lg hover:bg-green-50 text-green-600 w-full transition-colors"
-                      >
-                        <UserPlus className="w-4 h-4" />
-                        Add Friend
-                      </button>
+                      {isAlreadyFriend(profile.user_id) ? (
+                        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-gray-400 cursor-default">
+                          <UserPlus className="w-4 h-4" />
+                          Friend
+                        </div>
+                      ) : (
+                        (() => {
+                          const pend = isPendingWith(profile.user_id);
+                          if (pend.out) {
+                            return (
+                              <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-gray-400 cursor-default">
+                                <UserPlus className="w-4 h-4" />
+                                Request Sent
+                              </div>
+                            );
+                          }
+                          if (pend.inn) {
+                            return (
+                              <button
+                                onClick={() => navigate(createPageUrl('Profile'))}
+                                className="flex items-center gap-2 px-4 py-2.5 rounded-lg hover:bg-purple-50 text-purple-600 w-full transition-colors"
+                              >
+                                <UserPlus className="w-4 h-4" />
+                                Respond to Invite
+                              </button>
+                            );
+                          }
+                          return (
+                            <button
+                              onClick={() => handleAddFriend(profile.user_id)}
+                              className="flex items-center gap-2 px-4 py-2.5 rounded-lg hover:bg-green-50 text-green-600 w-full transition-colors"
+                            >
+                              <UserPlus className="w-4 h-4" />
+                              Add Friend
+                            </button>
+                          );
+                        })()
+                      )}
                     </motion.div>
                   )}
                 </div>

@@ -58,9 +58,9 @@ export default function Progress() {
         s.user_id === currentUser.email || s.user_id === currentUser.id || s.created_by === currentUser.email
       );
 
-      const userInterviews = aiInterviews.filter(s => 
+      const userInterviews = (aiInterviews || []).filter(s => 
         s.host_id === currentUser.email || 
-        s.participants?.some(p => p.user_id === currentUser.email)
+        s.participants?.some(p => p.user_id === currentUser.email || p.user_id === currentUser.id)
       );
 
       const userGDRooms = gdRooms.filter(s => 
@@ -73,11 +73,12 @@ export default function Progress() {
       const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
+      const normalizeDate = (obj) => obj?.created_date || obj?.completed_at || obj?.started_at || obj?.createdAt || obj?.updatedAt || obj?.date || Date.now();
       const allUserSessions = [
-        ...userGDSessions.map(s => ({ ...s, date: s.completed_at || s.created_date })),
-        ...userExtemporeSessions.map(s => ({ ...s, date: s.created_date })),
-        ...userInterviews.map(s => ({ ...s, date: s.created_date })),
-        ...userGDRooms.map(s => ({ ...s, date: s.started_at || s.created_date }))
+        ...userGDSessions.map(s => ({ ...s, date: normalizeDate(s) })),
+        ...userExtemporeSessions.map(s => ({ ...s, date: normalizeDate(s) })),
+        ...userInterviews.map(s => ({ ...s, date: normalizeDate(s) })),
+        ...userGDRooms.map(s => ({ ...s, date: normalizeDate(s) }))
       ];
 
       const thisWeekSessions = allUserSessions.filter(s => new Date(s.date) >= weekAgo).length;
@@ -103,7 +104,7 @@ export default function Progress() {
 
       // Recent activity
       const recent = allUserSessions
-        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .slice(0, 10);
       setRecentActivity(recent);
 

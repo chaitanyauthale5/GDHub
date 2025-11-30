@@ -7,7 +7,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../../utils';
 import XPBadge from '../shared/XPBadge';
 
-export default function TopNav({ activePage = 'Dashboard', user }) {
+export default function TopNav({ activePage = 'Dashboard', user = null }) {
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showChat, setShowChat] = useState(false);

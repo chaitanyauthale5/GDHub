@@ -17,6 +17,7 @@ export default function AIInterviewAI() {
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [interviewStarted, setInterviewStarted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [aiInterviewId, setAiInterviewId] = useState(null);
 
   const [config, setConfig] = useState({
     interview_type: 'hr',
@@ -61,6 +62,22 @@ export default function AIInterviewAI() {
     setLoading(true);
     try {
       await toggleCall();
+      // Create AIInterview record so Progress can count it
+      if (user) {
+        const code = `AIV${Date.now().toString().slice(-6)}`;
+        const rec = await api.entities.AIInterview.create({
+          room_code: code,
+          host_id: user.email,
+          host_name: user.full_name,
+          interview_type: config.interview_type,
+          company: config.company,
+          role: config.role,
+          duration: config.duration,
+          status: 'active',
+          participants: [{ user_id: user.email, name: user.full_name, joined_at: new Date().toISOString() }]
+        });
+        setAiInterviewId(rec?.id || rec?._id || null);
+      }
     } catch (e) {
       console.error('Error starting Vapi interview:', e);
     } finally {
@@ -80,6 +97,7 @@ export default function AIInterviewAI() {
 
     // Generate analysis from the transcripted conversation
     setLoading(true);
+
     const conversationText = conversation.map(m => `${m.role === 'ai' ? 'Interviewer' : 'Candidate'}: ${m.content}`).join('\n');
     
     const analysis = await api.integrations.Core.InvokeLLM({
@@ -101,6 +119,15 @@ Provide a detailed analysis.`,
         }
       }
     });
+
+    // Mark AIInterview completed for stats
+    try {
+      if (aiInterviewId) {
+        await api.entities.AIInterview.update(aiInterviewId, { status: 'completed' });
+      }
+    } catch (e) {
+      // ignore
+    }
 
     navigate(createPageUrl(`AIInterviewAnalysis?data=${encodeURIComponent(JSON.stringify(analysis))}`));
   };

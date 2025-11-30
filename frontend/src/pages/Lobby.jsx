@@ -17,6 +17,8 @@ export default function Lobby() {
   const [cameraOn, setCameraOn] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [botLevel, setBotLevel] = useState(1);
+  const [friends, setFriends] = useState([]);
+  const [inviting, setInviting] = useState({});
 
   const urlParams = new URLSearchParams(window.location.search);
   const roomId = urlParams.get('roomId');
@@ -44,7 +46,7 @@ export default function Lobby() {
       if (roomData.length > 0) {
         const fetchedRoom = roomData[0];
         setRoom(fetchedRoom);
-        
+
         // If room status changed to active, navigate to prepare/room
         if (fetchedRoom.status === 'active') {
           navigate(createPageUrl(`GDPrepare?roomId=${fetchedRoom.id}`));
@@ -53,8 +55,45 @@ export default function Lobby() {
           navigate(createPageUrl('Dashboard'));
         }
       }
+
+      // Load friends list for invites
+      if (currentUser) {
+        let myProfiles = await api.entities.UserProfile.filter({ user_id: currentUser.email });
+        if (myProfiles.length === 0) {
+          myProfiles = await api.entities.UserProfile.filter({ user_id: currentUser.id });
+        }
+        if (myProfiles.length > 0 && myProfiles[0].friends && myProfiles[0].friends.length > 0) {
+          const allUsers = await api.entities.User.list();
+          const list = allUsers.filter(u => myProfiles[0].friends.includes(u.email) || myProfiles[0].friends.includes(u.id));
+          setFriends(list);
+        } else {
+          setFriends([]);
+        }
+      }
     } catch (error) {
       console.error('Error loading data:', error);
+    }
+  };
+
+  const inviteFriend = async (friend) => {
+    if (!room || !user) return;
+    const friendEmail = friend.email || friend.id;
+    // If already in participants, skip
+    const alreadyIn = (room.participants || []).some(p => p.user_id === friendEmail || p.user_id === friend.id);
+    if (alreadyIn) return;
+    setInviting(prev => ({ ...prev, [friendEmail]: true }));
+    try {
+      await api.entities.Notification.create({
+        user_id: friendEmail,
+        type: 'room_invite',
+        title: 'Room Invite',
+        message: `${user.full_name} invited you to join GD room ${room.room_code}`,
+        from_user_id: user.email,
+        room_id: room.id,
+        is_read: false,
+      });
+    } finally {
+      setInviting(prev => ({ ...prev, [friendEmail]: false }));
     }
   };
 
@@ -123,7 +162,7 @@ export default function Lobby() {
           </button>
         </div>
       </div>
-      
+
       <div className="max-w-6xl mx-auto px-6 py-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -184,7 +223,7 @@ export default function Lobby() {
               </div>
               <h3 className="font-bold text-lg mb-2">Invite Friends</h3>
               <p className="text-sm text-gray-600 mb-4">
-                Share the room code with friends to join
+                Share code or send direct invites to your friends
               </p>
               <button
                 onClick={() => {
@@ -197,11 +236,38 @@ export default function Lobby() {
                     setTimeout(() => setCopied(false), 2000);
                   }
                 }}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-green-400 to-cyan-500 text-white font-bold flex items-center justify-center gap-2 hover:shadow-lg transition-all"
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-green-400 to-cyan-500 text-white font-bold flex items-center justify-center gap-2 hover:shadow-lg transition-all mb-3"
               >
                 <Share2 className="w-5 h-5" />
                 {copied ? 'Copied!' : 'Share Invite'}
               </button>
+
+              {/* Friends list */}
+              {friends && friends.length > 0 ? (
+                <div className="text-left max-h-60 overflow-y-auto space-y-2">
+                  {friends.map((f) => {
+                    const email = f.email || f.id;
+                    const alreadyIn = (room?.participants || []).some(p => p.user_id === email || p.user_id === f.id);
+                    return (
+                      <div key={email} className="flex items-center justify-between p-2 rounded-lg bg-white/60">
+                        <div>
+                          <p className="font-semibold leading-tight">{f.full_name || 'User'}</p>
+                          <p className="text-xs text-gray-500">{email}</p>
+                        </div>
+                        <button
+                          disabled={inviting[email] || alreadyIn}
+                          onClick={() => inviteFriend(f)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-bold ${alreadyIn ? 'bg-gray-200 text-gray-500' : 'bg-green-500 text-white hover:bg-green-600'}`}
+                        >
+                          {alreadyIn ? 'Joined' : (inviting[email] ? 'Inviting...' : 'Invite')}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500">No friends found. Add friends from the Leaderboard.</p>
+              )}
             </div>
           </ClayCard>
         </div>
