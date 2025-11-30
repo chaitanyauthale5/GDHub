@@ -166,10 +166,16 @@ export default function TopNav({ activePage = 'Dashboard', user }) {
         <div className="flex items-center justify-between h-16 sm:h-20">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-lg">
-              <span className="text-white font-black text-lg sm:text-xl">SU</span>
-            </div>
-            <span className="text-xl sm:text-2xl font-black text-gray-900">SpeakUp</span>
+            <img
+              src="/logo.png"
+              alt="SpeakUp Logo"
+              className="h-8 sm:h-10 w-auto"
+            />
+            <Link to="/dashboard">
+              <span className="text-xl sm:text-2xl font-black text-gray-900">
+                SpeakUp
+              </span>
+            </Link>
           </div>
 
           {/* Nav Items */}
