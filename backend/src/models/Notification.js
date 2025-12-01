@@ -5,6 +5,7 @@ const NotificationSchema = new mongoose.Schema({
     title: { type: String },
     message: { type: String },
     from_user_id: { type: String },
+    room_id: { type: String },
     is_read: { type: Boolean, default: false }
 }, { timestamps: true });
 module.exports = mongoose.model('Notification', NotificationSchema);

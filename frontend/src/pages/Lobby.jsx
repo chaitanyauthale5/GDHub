@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import { api } from '@/api/apiClient';
+import { useSocket } from '@/lib/SocketContext';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { api } from '@/api/apiClient';
-import { motion, AnimatePresence } from 'framer-motion';
 
-import { Users, Clock, Copy, Check, Play, Camera, Mic, ArrowLeft, LogOut, UserPlus, Share2, MessageSquare, Bot } from 'lucide-react';
+import { Bot, Camera, Check, Clock, Copy, LogOut, MessageSquare, Mic, Play, Share2, UserPlus, Users } from 'lucide-react';
 
 import ClayCard from '../components/shared/ClayCard';
-import GlassPanel from '../components/shared/GlassPanel';
 
 export default function Lobby() {
   const navigate = useNavigate();
@@ -18,6 +18,7 @@ export default function Lobby() {
   const [micOn, setMicOn] = useState(true);
   const [friends, setFriends] = useState([]);
   const [inviting, setInviting] = useState({});
+  const socket = useSocket();
 
   const urlParams = new URLSearchParams(window.location.search);
   const roomId = urlParams.get('roomId');
@@ -82,7 +83,7 @@ export default function Lobby() {
     if (alreadyIn) return;
     setInviting(prev => ({ ...prev, [friendEmail]: true }));
     try {
-      await api.entities.Notification.create({
+      const notif = await api.entities.Notification.create({
         user_id: friendEmail,
         type: 'room_invite',
         title: 'Room Invite',
@@ -91,6 +92,16 @@ export default function Lobby() {
         room_id: room.id,
         is_read: false,
       });
+      if (socket) {
+        socket.emit('room_invite_notification', {
+          to_user_id: friendEmail,
+          from_user_id: user.email,
+          from_user_name: user.full_name,
+          room_id: room.id,
+          room_code: room.room_code,
+          notification: notif,
+        });
+      }
     } finally {
       setInviting(prev => ({ ...prev, [friendEmail]: false }));
     }
