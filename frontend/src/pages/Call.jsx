@@ -1,3 +1,4 @@
+import AI3DAvatar from '@/components/shared/AI3DAvatar';
 import useZegoCall from '@/hooks/useZegoCall';
 import { useAuth } from '@/lib/AuthContext';
 import { AlertCircle, ArrowLeft, Mic, MicOff, PhoneOff, Video, VideoOff } from 'lucide-react';
@@ -128,6 +129,9 @@ export default function Call() {
             </div>
           </div>
         ))}
+        <div className="relative rounded-xl overflow-hidden bg-gradient-to-br from-purple-700 to-indigo-800 aspect-video">
+          <AI3DAvatar />
+        </div>
       </div>
 
       {/* Error banner */}
