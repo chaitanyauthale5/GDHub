@@ -16,6 +16,7 @@ export default function useWebRTC({ roomId, me, maxParticipants = 8, sendMedia =
   const connectedPeersRef = useRef({});
   const remoteStreamsRef = useRef({});
   const localStreamRef = useRef(null);
+  const pendingCandidatesRef = useRef({}); // peerKey -> RTCIceCandidateInit[]
   useEffect(() => { connectedPeersRef.current = connectedPeers; }, [connectedPeers]);
   useEffect(() => { remoteStreamsRef.current = remoteStreams; }, [remoteStreams]);
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
@@ -31,6 +32,13 @@ export default function useWebRTC({ roomId, me, maxParticipants = 8, sendMedia =
         }
       });
     }, delayMs);
+  };
+
+  const stopLocalTracks = () => {
+    try {
+      const s = localStreamRef.current;
+      if (s) s.getTracks().forEach(t => t.stop());
+    } catch {}
   };
 
   const myId = me?.email || me?.id || socket?.id;
@@ -91,11 +99,27 @@ export default function useWebRTC({ roomId, me, maxParticipants = 8, sendMedia =
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             socket.emit('webrtc:signal', { roomId, from: myClientId, target: from, data: answer });
+            const queued = pendingCandidatesRef.current[from] || [];
+            for (const c of queued) {
+              try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
+            }
+            pendingCandidatesRef.current[from] = [];
           } else if (data.type === 'answer') {
             await pc.setRemoteDescription(new RTCSessionDescription(data));
+            const queued = pendingCandidatesRef.current[from] || [];
+            for (const c of queued) {
+              try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch {}
+            }
+            pendingCandidatesRef.current[from] = [];
           } else if (data.candidate) {
             try {
-              await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+              if (pc.remoteDescription && pc.remoteDescription.type) {
+                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+              } else {
+                const list = pendingCandidatesRef.current[from] || [];
+                list.push(data.candidate);
+                pendingCandidatesRef.current[from] = list;
+              }
             } catch {}
           }
         });
@@ -115,7 +139,8 @@ export default function useWebRTC({ roomId, me, maxParticipants = 8, sendMedia =
           setConnectedPeers({});
           setRemoteStreams({});
           setDiagnostics({ socketId: null, peers: [], remotes: [], pcs: {}, lastSignal: null });
-          if (stream) stream.getTracks().forEach(t => t.stop());
+          try { if (stream) stream.getTracks().forEach(t => t.stop()); } catch {}
+          try { const cur = localStreamRef.current; if (cur) cur.getTracks().forEach(t => t.stop()); } catch {}
         };
       } catch (e) {
         console.error('WebRTC init error', e);
@@ -260,5 +285,6 @@ export default function useWebRTC({ roomId, me, maxParticipants = 8, sendMedia =
     mediaError,
     retryDevices,
     diagnostics,
+    stopLocalTracks,
   };
 }

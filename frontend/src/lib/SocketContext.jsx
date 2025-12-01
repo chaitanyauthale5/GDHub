@@ -13,10 +13,18 @@ export const SocketProvider = ({ children }) => {
     const { user } = useAuth();
 
     useEffect(() => {
-        // Always connect; register user if available
-        const backendUrl = (typeof globalThis !== 'undefined' && globalThis['__API_BASE_URL__'])
-            ? globalThis['__API_BASE_URL__']
-            : 'http://localhost:5000';
+        const inferredUrl = (() => {
+            try {
+                const proto = window.location.protocol.startsWith('https') ? 'https' : 'http';
+                const host = window.location.hostname || 'localhost';
+                const port = '5000';
+                return `${proto}://${host}:${port}`;
+            } catch {
+                return 'http://localhost:5000';
+            }
+        })();
+        const envUrl = (typeof globalThis !== 'undefined' && globalThis['__API_BASE_URL__']) || null;
+        const backendUrl = envUrl || inferredUrl;
         const newSocket = io(backendUrl, {
             withCredentials: true,
             transports: ['websocket', 'polling'],

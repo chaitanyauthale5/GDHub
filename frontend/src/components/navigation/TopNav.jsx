@@ -304,10 +304,8 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                                         await api.entities.Notification.update(notif.id, { is_read: true });
                                         if (room.status === 'lobby') {
                                           navigate(createPageUrl(`Lobby?roomId=${room.id}`));
-                                        } else if (room.status === 'active') {
-                                          navigate(createPageUrl(`GDPrepare?roomId=${room.id}`));
                                         } else {
-                                          navigate(createPageUrl('Dashboard'));
+                                          navigate(createPageUrl(`GDRoom?roomId=${room.id}`));
                                         }
                                       } catch (e) {}
                                     }}
