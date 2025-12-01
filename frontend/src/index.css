@@ -154,5 +154,16 @@ button:focus-visible {
   }
   body {
     @apply bg-background text-foreground;
+    scrollbar-gutter: stable both-edges;
+    overscroll-behavior: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }

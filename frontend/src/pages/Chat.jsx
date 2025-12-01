@@ -3,9 +3,8 @@ import { useSocket } from '@/lib/SocketContext';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { Input } from '@/components/ui/input';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Send } from 'lucide-react';
+import { ArrowLeft, Check, Send, Trash2 } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
 
@@ -22,6 +21,7 @@ export default function Chat() {
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef(null);
   const socket = useSocket();
+  const [deleting, setDeleting] = useState({});
 
   useEffect(() => {
     loadData();
@@ -31,30 +31,36 @@ export default function Chat() {
 
   useEffect(() => {
     if (!socket || !user || !friendKey) return;
-
-    // Create a unique room ID for the pair (e.g., sorted user IDs)
     const roomId = [user.email, friendKey].sort().join('_');
     socket.emit('join_room', roomId);
 
     const handleReceiveMessage = (newMessage) => {
-      // Only append if it belongs to this conversation
       if (
         (newMessage.from_user_id === friendKey && newMessage.to_user_id === user.email) ||
         (newMessage.from_user_id === user.email && newMessage.to_user_id === friendKey)
       ) {
         setMessages((prev) => [...prev, newMessage]);
-
-        // Mark as read if it's from friend
         if (newMessage.from_user_id === friendKey) {
-          api.entities.ChatMessage.update(newMessage.id, { is_read: true }).catch(console.error);
+          api.entities.ChatMessage.update(newMessage.id, { is_read: true })
+            .then(() => {
+              try { socket.emit('message_read', { message_id: newMessage.id, from_user_id: friendKey, to_user_id: user.email }); } catch {}
+            })
+            .catch(() => {});
         }
+      }
+    };
+    const handleMessageRead = (payload = {}) => {
+      if (payload.from_user_id === user.email && payload.to_user_id === friendKey) {
+        setMessages((prev) => prev.map(m => m.id === payload.message_id ? { ...m, is_read: true } : m));
       }
     };
 
     socket.on('receive_message', handleReceiveMessage);
+    socket.on('message_read', handleMessageRead);
 
     return () => {
       socket.off('receive_message', handleReceiveMessage);
+      socket.off('message_read', handleMessageRead);
     };
   }, [socket, user, friendKey]);
 
@@ -88,22 +94,20 @@ export default function Chat() {
     if (!peerId || !currentUser) return;
 
     try {
-      // Get messages between the two users
-      const allMessages = await api.entities.ChatMessage.list('-created_date', 100);
-
+      const allMessages = await api.entities.ChatMessage.list('-created_date', 200);
       const conversation = allMessages.filter(m =>
         (m.from_user_id === currentUser.email && m.to_user_id === peerId) ||
         (m.from_user_id === peerId && m.to_user_id === currentUser.email)
-      ).reverse();
+      ).sort((a, b) => new Date(a.createdAt || a.created_date || 0).getTime() - new Date(b.createdAt || b.created_date || 0).getTime());
 
       setMessages(conversation);
 
-      // Mark messages as read
-      const unreadMessages = conversation.filter(m =>
-        m.to_user_id === currentUser.email && !m.is_read
-      );
+      const unreadMessages = conversation.filter(m => m.to_user_id === currentUser.email && !m.is_read);
       for (const msg of unreadMessages) {
-        await api.entities.ChatMessage.update(msg.id, { is_read: true });
+        try {
+          await api.entities.ChatMessage.update(msg.id, { is_read: true });
+          try { socket?.emit('message_read', { message_id: msg.id, from_user_id: peerId, to_user_id: currentUser.email }); } catch {}
+        } catch {}
       }
     } catch (error) {
       console.error('Error loading messages:', error);
@@ -143,6 +147,29 @@ export default function Chat() {
     }
   };
 
+  const deleteMessage = async (id) => {
+    if (!id) return;
+    setDeleting(prev => ({ ...prev, [id]: true }));
+    try {
+      await api.entities.ChatMessage.delete(id);
+      setMessages(prev => prev.filter(m => m.id !== id));
+    } finally {
+      setDeleting(prev => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const clearConversation = async () => {
+    if (!user || !friendKey) return;
+    const ids = messages.filter(m =>
+      (m.from_user_id === user.email && m.to_user_id === friendKey) ||
+      (m.from_user_id === friendKey && m.to_user_id === user.email)
+    ).map(m => m.id);
+    try {
+      await Promise.all(ids.map(id => api.entities.ChatMessage.delete(id)));
+      setMessages([]);
+    } catch {}
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -177,6 +204,15 @@ export default function Chat() {
               <p className="text-sm text-gray-500">{displayEmail}</p>
             </div>
           </div>
+          <div className="ml-auto">
+            <button
+              onClick={clearConversation}
+              className="px-3 py-2 rounded-lg bg-red-100 text-red-600 font-bold flex items-center gap-2 hover:bg-red-200"
+            >
+              <Trash2 className="w-4 h-4" />
+              Clear chat
+            </button>
+          </div>
         </div>
 
         {/* Messages */}
@@ -201,10 +237,23 @@ export default function Chat() {
                       }`}
                   >
                     <p>{message.message}</p>
-                    <p className={`text-xs mt-1 ${message.from_user_id === user?.email ? 'text-white/70' : 'text-gray-400'
-                      }`}>
-                      {new Date(message.created_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className={`text-xs ${message.from_user_id === user?.email ? 'text-white/70' : 'text-gray-400'}`}>
+                        {new Date(message.createdAt || message.created_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                      {message.from_user_id === user?.email && (
+                        <Check className={`w-4 h-4 ${message.is_read ? 'text-green-200' : ( 'text-white/50')}`} />
+                      )}
+                      {message.from_user_id === user?.email && (
+                        <button
+                          onClick={() => deleteMessage(message.id)}
+                          disabled={!!deleting[message.id]}
+                          className={`ml-1 text-xs ${message.from_user_id === user?.email ? 'text-white/70 hover:text-red-200' : 'text-gray-400 hover:text-red-500'}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </motion.div>
               ))
@@ -215,12 +264,13 @@ export default function Chat() {
           {/* Input */}
           <div className="border-t border-gray-200 p-4">
             <div className="flex gap-2">
-              <Input
+              <input
+                type="text"
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
                 placeholder="Type a message..."
-                className="flex-1"
+                className="flex-1 h-10 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-purple-500"
               />
               <motion.button
                 whileHover={{ scale: 1.05 }}

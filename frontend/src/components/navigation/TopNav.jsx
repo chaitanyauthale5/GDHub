@@ -19,6 +19,8 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [myProfile, setMyProfile] = useState(null);
   const socket = useSocket();
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const [unreadByFriend, setUnreadByFriend] = useState({});
 
   const navItems = currentUser
     ? ['Dashboard', 'Explore', 'Progress', 'Leaderboard']
@@ -26,8 +28,6 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
 
   useEffect(() => {
     loadNotifications();
-    const interval = setInterval(loadNotifications, 10000);
-    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -39,13 +39,34 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
     const handleRoomInviteNotification = () => {
       loadNotifications();
     };
+    const handleChatMessageNotification = (payload) => {
+      if (!payload || payload.to_user_id !== currentUser.email) return;
+      setUnreadChatCount((c) => c + 1);
+      setUnreadByFriend((m) => {
+        const key = payload.from_user_id;
+        return { ...m, [key]: (m[key] || 0) + 1 };
+      });
+    };
+    const handleMessageRead = (payload = {}) => {
+      if (payload.to_user_id !== currentUser.email) return;
+      setUnreadChatCount((c) => Math.max(0, c - 1));
+      setUnreadByFriend((m) => {
+        const key = payload.from_user_id;
+        const next = Math.max(0, (m[key] || 0) - 1);
+        return { ...m, [key]: next };
+      });
+    };
 
     socket.on('friend_request_notification', handleFriendRequestNotification);
     socket.on('room_invite_notification', handleRoomInviteNotification);
+    socket.on('chat_message_notification', handleChatMessageNotification);
+    socket.on('message_read', handleMessageRead);
 
     return () => {
       socket.off('friend_request_notification', handleFriendRequestNotification);
       socket.off('room_invite_notification', handleRoomInviteNotification);
+      socket.off('chat_message_notification', handleChatMessageNotification);
+      socket.off('message_read', handleMessageRead);
     };
   }, [socket, currentUser]);
 
@@ -74,6 +95,16 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
       const notifs = await api.entities.Notification.filter({ user_id: me.email }, '-created_date', 50);
       setNotifications(notifs);
       setUnreadCount((notifs || []).filter(n => !n.is_read).length);
+
+      const chatMsgs = await api.entities.ChatMessage.list('-created_date', 200);
+      const unreadMap = {};
+      for (const m of (chatMsgs || [])) {
+        if (m.to_user_id === me.email && !m.is_read) {
+          unreadMap[m.from_user_id] = (unreadMap[m.from_user_id] || 0) + 1;
+        }
+      }
+      setUnreadByFriend(unreadMap);
+      setUnreadChatCount(Object.values(unreadMap).reduce((a, b) => a + b, 0));
 
       // Get friends for chat - check both email and id
       let profileData = await api.entities.UserProfile.filter({ user_id: me.email });
@@ -215,10 +246,10 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                 <AnimatePresence>
                   {showNotifications && (
                     <motion.div
-                      initial={{ opacity: 0, y: -10 }}
+                      initial={false}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
-                      className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl p-4 shadow-2xl border border-gray-100 z-50"
+                      className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl p-4 shadow-2xl border border-gray-100 z-50 transform-gpu"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="font-bold text-lg">Notifications</h3>
@@ -394,14 +425,19 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                 >
                   <MessageCircle className="w-5 h-5 text-gray-700" />
                 </button>
+                {unreadChatCount > 0 && (
+                  <span className="absolute top-1 right-1 w-5 h-5 bg-red-500 rounded-full text-white text-xs flex items-center justify-center font-bold">
+                    {unreadChatCount}
+                  </span>
+                )}
 
                 <AnimatePresence>
                   {showChat && (
                     <motion.div
-                      initial={{ opacity: 0, y: -10 }}
+                      initial={false}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
-                      className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl p-4 shadow-2xl border border-gray-100 z-50"
+                      className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl p-4 shadow-2xl border border-gray-100 z-50 transform-gpu"
                     >
                       <h3 className="font-bold text-lg mb-3">Chat with Friends</h3>
                       {friends.length > 0 ? (
@@ -418,6 +454,11 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                               <div className="text-left">
                                 <p className="font-medium">{friend.full_name}</p>
                                 <p className="text-xs text-gray-500">Click to chat</p>
+                                {(unreadByFriend[friend.email] || unreadByFriend[friend.id]) > 0 && (
+                                  <span className="inline-flex items-center justify-center mt-1 px-2 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
+                                    {(unreadByFriend[friend.email] || unreadByFriend[friend.id])}
+                                  </span>
+                                )}
                               </div>
                             </button>
                           ))}
@@ -454,10 +495,10 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                 <AnimatePresence>
                   {showProfileMenu && (
                     <motion.div
-                      initial={{ opacity: 0, y: -10 }}
+                      initial={false}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
-                      className="absolute right-0 mt-2 w-48 bg-white rounded-2xl p-2 shadow-2xl border border-gray-100 z-50"
+                      className="absolute right-0 mt-2 w-48 bg-white rounded-2xl p-2 shadow-2xl border border-gray-100 z-50 transform-gpu"
                     >
                       <Link
                         to={createPageUrl('Profile')}

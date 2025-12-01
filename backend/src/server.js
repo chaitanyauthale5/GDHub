@@ -240,9 +240,20 @@ const start = async () => {
         });
 
         socket.on('send_message', (data) => {
-            // data: { room, message, from_user_id, ... }
-            // Broadcast to everyone in the room INCLUDING sender (or exclude if handled optimistically on client)
             io.to(data.room).emit('receive_message', data);
+            if (data && data.to_user_id) {
+                const userRoom = `user:${data.to_user_id}`;
+                io.to(userRoom).emit('chat_message_notification', data);
+            }
+        });
+
+        socket.on('message_read', (payload = {}) => {
+            const { message_id, from_user_id, to_user_id } = payload;
+            if (!message_id || !from_user_id || !to_user_id) return;
+            const fromRoom = `user:${from_user_id}`;
+            const toRoom = `user:${to_user_id}`;
+            io.to(fromRoom).emit('message_read', payload);
+            io.to(toRoom).emit('message_read', payload);
         });
 
         // (disconnect handler moved above for presence cleanup)
