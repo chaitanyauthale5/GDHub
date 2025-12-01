@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { createPageUrl } from '../utils';
 import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
-import { Users, Clock, BookOpen, Plus, ArrowRight, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen, Clock, Plus, Users } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
+import { createPageUrl } from '../utils';
 
 export default function CreateRoom() {
   const navigate = useNavigate();
@@ -60,7 +60,7 @@ export default function CreateRoom() {
           name: user.full_name,
           joined_at: new Date().toISOString()
         }],
-        topic: `Discussion on ${formData.domain}`
+        topic: getRandomTopic(formData.domain)
       });
 
       navigate(createPageUrl(`Lobby?roomId=${room.id}`));
@@ -75,6 +75,73 @@ export default function CreateRoom() {
     'Technology', 'Business', 'Education', 'Healthcare', 
     'Environment', 'Politics', 'Sports', 'Entertainment'
   ];
+
+  const topicsByDomain = {
+    technology: [
+      'Impact of artificial intelligence on future jobs',
+      'Is social media making us more connected or more isolated?',
+      'Should governments regulate big tech companies more strictly?',
+      'Are smartphones making us smarter or more distracted?',
+    ],
+    business: [
+      'Should companies prioritize profit or social responsibility?',
+      'Is work-from-home the future of corporate culture?',
+      'Are startups better than traditional corporate jobs?',
+      'Impact of influencer marketing on consumer behavior',
+    ],
+    education: [
+      'Is online learning as effective as classroom learning?',
+      'Should coding be mandatory in schools?',
+      'Grades vs skills: What matters more for a student?',
+      'Exams: test of memory or understanding?',
+    ],
+    healthcare: [
+      'Mental health awareness in today\'s youth',
+      'Should healthcare be a fundamental right?',
+      'Impact of fitness trackers on our lifestyle',
+      'Are we becoming too dependent on medicines?',
+    ],
+    environment: [
+      'Climate change: individual responsibility vs government policy',
+      'Are electric vehicles the real solution to pollution?',
+      'Plastic ban: how practical is it?',
+      'Is economic growth possible without harming the environment?',
+    ],
+    politics: [
+      'Role of youth in modern politics',
+      'Should voting be made compulsory?',
+      'Is social media changing the way we view politics?',
+      'Politics and development: can they go hand in hand?',
+    ],
+    sports: [
+      'Is cricket overshadowing other sports?',
+      'Are sports stars better role models than film stars?',
+      'Should e-sports be considered real sports?',
+      'Pressure on young athletes to perform',
+    ],
+    entertainment: [
+      'Reality shows: how real are they?',
+      'Impact of OTT platforms on traditional cinema',
+      'Are celebrities responsible for promoting healthy lifestyles?',
+      'Has entertainment become too violent?',
+    ],
+    general: [
+      'Is success more about hard work or smart work?',
+      'Should failure be celebrated as a learning step?',
+      'Is money the most important factor for happiness?',
+      'Has technology improved human relationships?',
+    ],
+  };
+
+  const getRandomTopic = (domain) => {
+    const key = String(domain || 'general').toLowerCase();
+    const list = topicsByDomain[key] || topicsByDomain['general'] || [];
+    if (!list.length) {
+      return `Discussion on ${domain || 'general topics'}`;
+    }
+    const index = Math.floor(Math.random() * list.length);
+    return list[index];
+  };
 
   return (
     <div className="min-h-screen pb-20">
