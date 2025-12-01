@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../../utils';
 import XPBadge from '../shared/XPBadge';
+const speakupLogo = new URL('../../assets/logo-removebg-preview.png', import.meta.url).href;
 
 export default function TopNav({ activePage = 'Dashboard', user = null }) {
   const navigate = useNavigate();
@@ -195,9 +196,10 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
           {/* Logo */}
           <div className="flex items-center gap-3">
             <img
-              src="/logo.png"
+              src={speakupLogo}
               alt="SpeakUp Logo"
-              className="h-8 sm:h-10 w-auto"
+              className="h-16 sm:h-20 w-auto object-contain"
+              draggable={false}
             />
             <Link to="/dashboard">
               <span className="text-xl sm:text-2xl font-black text-gray-900">
