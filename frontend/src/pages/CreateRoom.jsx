@@ -6,8 +6,6 @@ import { motion } from 'framer-motion';
 import { Users, Clock, BookOpen, Plus, ArrowRight, ArrowLeft } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function CreateRoom() {
   const navigate = useNavigate();
@@ -107,18 +105,23 @@ export default function CreateRoom() {
                 <Users className="w-5 h-5 text-purple-600" />
                 Team Size
               </label>
-              <Select value={formData.teamSize.toString()} onValueChange={(val) => setFormData({...formData, teamSize: parseInt(val)})}>
-                <SelectTrigger className="clay-card border-none h-14 text-lg">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="2">2 Participants</SelectItem>
-                  <SelectItem value="3">3 Participants</SelectItem>
-                  <SelectItem value="4">4 Participants</SelectItem>
-                  <SelectItem value="5">5 Participants</SelectItem>
-                  <SelectItem value="6">6 Participants</SelectItem>
-                </SelectContent>
-              </Select>
+              <select
+                value={formData.teamSize}
+                onChange={(e) => setFormData({ ...formData, teamSize: parseInt(e.target.value) })}
+                className="clay-card border-none h-14 text-lg w-full px-4 rounded-2xl"
+              >
+                <option value={2}>2 Participants</option>
+                <option value={3}>3 Participants</option>
+                <option value={4}>4 Participants</option>
+                <option value={5}>5 Participants</option>
+                <option value={6}>6 Participants</option>
+                <option value={7}>7 Participants</option>
+                <option value={8}>8 Participants</option>
+                <option value={9}>9 Participants</option>
+                <option value={10}>10 Participants</option>
+                <option value={11}>11 Participants</option>
+                <option value={12}>12 Participants</option>
+              </select>
             </div>
 
             {/* Domain */}
@@ -127,18 +130,15 @@ export default function CreateRoom() {
                 <BookOpen className="w-5 h-5 text-purple-600" />
                 GD Domain
               </label>
-              <Select value={formData.domain} onValueChange={(val) => setFormData({...formData, domain: val})}>
-                <SelectTrigger className="clay-card border-none h-14 text-lg capitalize">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {domains.map((domain) => (
-                    <SelectItem key={domain} value={domain.toLowerCase()}>
-                      {domain}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <select
+                value={formData.domain}
+                onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
+                className="clay-card border-none h-14 text-lg w-full px-4 rounded-2xl capitalize"
+              >
+                {domains.map((d) => (
+                  <option key={d} value={d.toLowerCase()} className="capitalize">{d}</option>
+                ))}
+              </select>
             </div>
 
             {/* Duration */}
@@ -147,17 +147,16 @@ export default function CreateRoom() {
                 <Clock className="w-5 h-5 text-purple-600" />
                 Duration
               </label>
-              <Select value={formData.duration.toString()} onValueChange={(val) => setFormData({...formData, duration: parseInt(val)})}>
-                <SelectTrigger className="clay-card border-none h-14 text-lg">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10">10 minutes</SelectItem>
-                  <SelectItem value="15">15 minutes</SelectItem>
-                  <SelectItem value="20">20 minutes</SelectItem>
-                  <SelectItem value="30">30 minutes</SelectItem>
-                </SelectContent>
-              </Select>
+              <select
+                value={formData.duration}
+                onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value) })}
+                className="clay-card border-none h-14 text-lg w-full px-4 rounded-2xl"
+              >
+                <option value={10}>10 minutes</option>
+                <option value={15}>15 minutes</option>
+                <option value={20}>20 minutes</option>
+                <option value={30}>30 minutes</option>
+              </select>
             </div>
           </div>
 

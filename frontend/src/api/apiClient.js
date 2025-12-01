@@ -34,7 +34,7 @@ async function request(method, path, body, headers = {}) {
     const msg = await safeJson(resp);
     const error = new Error(msg?.message || `Request failed: ${resp.status}`);
     // Attach status so callers can distinguish 401, 403, etc.
-    error.status = resp.status;
+    error['status'] = resp.status;
     throw error;
   }
   return await safeJson(resp);
@@ -141,7 +141,7 @@ const auth = {
       return await get('/api/auth/me');
     } catch (error) {
       // If not logged in, backend returns 401. Represent this as null instead of throwing.
-      if (error && (error.status === 401 || (error['status'] === 401))) return null;
+      if (error && Number(error['status']) === 401) return null;
       throw error;
     }
   },

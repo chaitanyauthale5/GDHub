@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSocket } from '@/lib/SocketContext';
 
-export default function useWebRTC({ roomId, me, maxParticipants = 8, sendMedia = true }) {
+export default function useWebRTC({ roomId, me, maxParticipants = 12, sendMedia = true }) {
   const socket = useSocket();
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({}); // key: userId -> MediaStream
@@ -11,12 +11,66 @@ export default function useWebRTC({ roomId, me, maxParticipants = 8, sendMedia =
   const [mediaError, setMediaError] = useState(null);
   const joiningRef = useRef(false);
   const [diagnostics, setDiagnostics] = useState({ socketId: null, peers: [], remotes: [], pcs: {}, lastSignal: null });
+  const xirsysFetchedRef = useRef(false);
 
   // Refs that mirror state to avoid stale closures in socket handlers
   const connectedPeersRef = useRef({});
   const remoteStreamsRef = useRef({});
   const localStreamRef = useRef(null);
   const pendingCandidatesRef = useRef({}); // peerKey -> RTCIceCandidateInit[]
+  const iceRestartedAtRef = useRef({}); // peerKey -> timestamp
+  const getIceServers = () => {
+    try {
+      if (typeof window !== 'undefined' && window && window['__ICE_SERVERS__']) return window['__ICE_SERVERS__'];
+      const raw = localStorage.getItem('ice_servers');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:openrelay.metered.ca:80' },
+      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+    ];
+  };
+  useEffect(() => {
+    try {
+      if (xirsysFetchedRef.current) return;
+      const cfg = (typeof window !== 'undefined' && window && window['__XIRSYS__']) || (() => {
+        try {
+          const ident = localStorage.getItem('xirsys_ident');
+          const secret = localStorage.getItem('xirsys_secret');
+          const channel = localStorage.getItem('xirsys_channel') || 'MyFirstApp';
+          if (ident && secret) return { ident, secret, channel };
+        } catch {}
+        return null;
+      })();
+      if (!cfg) return;
+      xirsysFetchedRef.current = true;
+      (async () => {
+        try {
+          const res = await fetch(`https://global.xirsys.net/_turn/${encodeURIComponent(cfg.channel || 'MyFirstApp')}`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': 'Basic ' + (typeof btoa !== 'undefined' ? btoa(`${cfg.ident}:${cfg.secret}`) : ''),
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ format: 'urls' })
+          });
+          const data = await res.json().catch(() => null);
+          let servers = [];
+          if (Array.isArray(data)) servers = data.map(u => ({ urls: u }));
+          else if (Array.isArray(data?.v)) servers = data.v.map(u => ({ urls: u }));
+          else if (Array.isArray(data?.iceServers)) servers = data.iceServers;
+          else if (Array.isArray(data?.v?.iceServers)) servers = data.v.iceServers;
+          if (servers && servers.length) {
+            try { localStorage.setItem('ice_servers', JSON.stringify(servers)); } catch {}
+            if (typeof window !== 'undefined' && window) window['__ICE_SERVERS__'] = servers;
+          }
+        } catch {}
+      })();
+    } catch {}
+  }, []);
   useEffect(() => { connectedPeersRef.current = connectedPeers; }, [connectedPeers]);
   useEffect(() => { remoteStreamsRef.current = remoteStreams; }, [remoteStreams]);
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
@@ -53,7 +107,17 @@ export default function useWebRTC({ roomId, me, maxParticipants = 8, sendMedia =
       try {
         let stream = null;
         if (sendMedia) {
-          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          const videoConstraints = {
+            width: { ideal: 640, max: 640 },
+            height: { ideal: 360, max: 360 },
+            frameRate: { ideal: 24, max: 30 },
+          };
+          const audioConstraints = {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          };
+          stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: audioConstraints });
           setLocalStream(stream);
           localStreamRef.current = stream;
           setMediaError(null);
@@ -69,6 +133,8 @@ export default function useWebRTC({ roomId, me, maxParticipants = 8, sendMedia =
             if (peerKey === myClientId) return;
             if (typeof p !== 'string' && p?.userId && p.userId === myId && !p?.clientId) return;
             if (connectedPeersRef.current[peerKey]) return;
+            const limit = Math.max(1, (maxParticipants || 12) - 1);
+            if (Object.keys(connectedPeersRef.current).length >= limit) return;
             createPeerConnection(peerKey, true);
           });
           ensureConnections(800);
@@ -81,6 +147,8 @@ export default function useWebRTC({ roomId, me, maxParticipants = 8, sendMedia =
           if (typeof userId === 'string' && !clientId && userId === myId) return;
           // Do not initiate here; the joiner initiates using peers list.
           setDiagnostics(d => ({ ...d, peers: Array.from(new Set([...(d.peers || []), peerKey])) }));
+          const limit = Math.max(1, (maxParticipants || 12) - 1);
+          if (Object.keys(connectedPeersRef.current).length >= limit) return;
           ensureConnections(1200);
         });
 
@@ -154,14 +222,9 @@ export default function useWebRTC({ roomId, me, maxParticipants = 8, sendMedia =
 
   const createPeerConnection = (peerKey, isInitiator) => {
     const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        // Free public TURN by openrelay.metered.ca (best-effort for dev)
-        { urls: 'stun:openrelay.metered.ca:80' },
-        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-      ],
+      iceServers: getIceServers(),
+      bundlePolicy: 'max-bundle',
+      iceTransportPolicy: 'all',
     });
 
     // Keep map up to date
@@ -177,6 +240,26 @@ export default function useWebRTC({ roomId, me, maxParticipants = 8, sendMedia =
       try { pc.addTransceiver('video', { direction: 'recvonly' }); } catch {}
     }
 
+    const tuneSenders = () => {
+      try {
+        const peerCount = Object.keys(connectedPeersRef.current || {}).length + 1;
+        const targetVideo = peerCount >= 8 ? 300_000 : 600_000;
+        pc.getSenders().forEach(sender => {
+          if (!sender.track) return;
+          const p = sender.getParameters();
+          if (!p.encodings || p.encodings.length === 0) p.encodings = [{}];
+          if (sender.track.kind === 'video') {
+            p.encodings[0].maxBitrate = targetVideo;
+            p.degradationPreference = 'maintain-framerate';
+          } else if (sender.track.kind === 'audio') {
+            p.encodings[0].maxBitrate = 32_000;
+          }
+          sender.setParameters(p).catch(() => {});
+        });
+      } catch {}
+    };
+    tuneSenders();
+
     pc.ontrack = (event) => {
       const [stream] = event.streams;
       setRemoteStreams(prev => ({ ...prev, [peerKey]: stream }));
@@ -190,8 +273,20 @@ export default function useWebRTC({ roomId, me, maxParticipants = 8, sendMedia =
       }
     };
 
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
+    pc.onconnectionstatechange = async () => {
+      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        const last = iceRestartedAtRef.current[peerKey] || 0;
+        const now = Date.now();
+        if (now - last > 15000) {
+          iceRestartedAtRef.current[peerKey] = now;
+          try {
+            const offer = await pc.createOffer({ iceRestart: true });
+            await pc.setLocalDescription(offer);
+            socket.emit('webrtc:signal', { roomId, from: myClientId, target: peerKey, data: offer });
+          } catch {}
+        }
+      }
+      if (pc.connectionState === 'closed') {
         removePeer(peerKey);
       }
       setDiagnostics(d => ({ ...d, pcs: { ...d.pcs, [peerKey]: { ...(d.pcs?.[peerKey] || {}), conn: pc.connectionState } } }));
@@ -256,7 +351,10 @@ export default function useWebRTC({ roomId, me, maxParticipants = 8, sendMedia =
 
   const retryDevices = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640, max: 640 }, height: { ideal: 360, max: 360 }, frameRate: { ideal: 24, max: 30 } },
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
       setLocalStream(stream);
       localStreamRef.current = stream;
       setMediaError(null);
