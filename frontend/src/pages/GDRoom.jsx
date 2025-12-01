@@ -49,7 +49,7 @@ export default function GDRoom() {
   }, [timeLeft]);
 
   // WebRTC media and signaling
-  const { localStream, remoteStreams, micOn, cameraOn, toggleMic, toggleCamera, mediaError, retryDevices, diagnostics } = useWebRTC({
+  const { localStream, remoteStreams, micOn, cameraOn, toggleMic, toggleCamera, mediaError, retryDevices, diagnostics, stopLocalTracks } = useWebRTC({
     roomId,
     me: user,
     maxParticipants: room?.team_size || 8,
@@ -108,6 +108,7 @@ export default function GDRoom() {
       setSessionActive(false);
 
       if (!room) {
+        try { stopLocalTracks(); } catch {}
         navigate(createPageUrl('Dashboard'));
         return;
       }
@@ -116,12 +117,14 @@ export default function GDRoom() {
       const amHost = user && (hostId === user.email || hostId === user.id);
 
       if (!amHost) {
+        try { stopLocalTracks(); } catch {}
         navigate(createPageUrl(`GDAnalysis?roomId=${room.id}`));
         return;
       }
 
       // Host ends the room and navigates to analysis
       await api.entities.GDRoom.update(room.id, { status: 'completed' });
+      try { stopLocalTracks(); } catch {}
       navigate(createPageUrl(`GDAnalysis?roomId=${room.id}`));
     } catch (error) {
       console.error('Error ending session:', error);

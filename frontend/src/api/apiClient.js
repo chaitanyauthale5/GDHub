@@ -1,6 +1,16 @@
 // Lightweight API client replacing prior vendor SDK. No external auth provider dependency.
 
-const API_BASE_URL = (typeof globalThis !== 'undefined' && globalThis['__API_BASE_URL__']) || 'http://localhost:5000';
+const inferBase = () => {
+  try {
+    const proto = window.location.protocol.startsWith('https') ? 'https' : 'http';
+    const host = window.location.hostname || 'localhost';
+    const port = '5000';
+    return `${proto}://${host}:${port}`;
+  } catch {
+    return 'http://localhost:5000';
+  }
+};
+const API_BASE_URL = (typeof globalThis !== 'undefined' && globalThis['__API_BASE_URL__']) || inferBase();
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
@@ -131,7 +141,7 @@ const auth = {
       return await get('/api/auth/me');
     } catch (error) {
       // If not logged in, backend returns 401. Represent this as null instead of throwing.
-      if (error && error.status === 401) return null;
+      if (error && (error.status === 401 || (error['status'] === 401))) return null;
       throw error;
     }
   },
@@ -174,15 +184,44 @@ const integrations = {
       const response_json_schema = args && args.response_json_schema;
       const props = response_json_schema?.properties || {};
       const keys = Object.keys(props);
+      // Generic chat style
       if (keys.includes('message') && keys.includes('question')) {
         return { message: "Hello! Let's begin your interview.", question: 'Tell me about yourself.' };
       }
+      // Interview turn feedback
       if (keys.includes('feedback') && keys.includes('next_question')) {
         return { feedback: 'Thanks, that was a clear response.', next_question: "What's a challenging problem you've solved recently?" };
       }
+      // Single text response
       if (keys.includes('response')) {
         return { response: 'Welcome! Please introduce yourself and share your background briefly.' };
       }
+      // GDAnalysis overall schema
+      if (keys.includes('overallScore') && keys.includes('participationScore') && keys.includes('communicationScore')) {
+        return {
+          overallScore: 72,
+          participationScore: 68,
+          communicationScore: 74,
+          knowledgeScore: 70,
+          teamworkScore: 76,
+          strengths: ['Clear articulation', 'Good listening', 'Positive tone'],
+          improvements: ['More concise points', 'Include examples', 'Invite others to speak'],
+          detailedFeedback: 'You contributed steadily and summarized key points. Work on being more concise and adding evidence to strengthen arguments.',
+          tips: ['Lead with your main point', 'Use 1 concrete example per point', 'Summarize and handoff to a teammate']
+        };
+      }
+      // Per-participant schema
+      if (keys.includes('participationSummary') && keys.includes('overallScore') && keys.includes('knowledgeScore')) {
+        return {
+          overallScore: 70,
+          communicationScore: 72,
+          knowledgeScore: 66,
+          participationSummary: 'Shared multiple points and responded to peers with respect.',
+          strengths: ['Structured points', 'Good eye contact', 'Calm tone'],
+          improvements: ['Add data points', 'Trim filler words', 'Summarize more often']
+        };
+      }
+      // Fallback
       return { content: `LLM is not connected. Stub for prompt: ${String(prompt || '').slice(0, 80)}...` };
     },
     async SendEmail(_payload) { return { success: true }; },

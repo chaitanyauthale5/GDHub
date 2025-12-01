@@ -9,6 +9,16 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Optional: set backend API base at runtime for cross-network testing
+      // You can run in console: localStorage.setItem('api_base_url','https://your-backend.ngrok.app')
+      (function () {
+        try {
+          var v = localStorage.getItem('api_base_url');
+          if (v) window.__API_BASE_URL__ = v;
+        } catch (e) {}
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

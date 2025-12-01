@@ -357,10 +357,12 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                                         loadNotifications();
                                         if (room.status === 'lobby') {
                                           navigate(createPageUrl(`Lobby?roomId=${room.id}`));
+
                                         } else if (room.status === 'active') {
                                           navigate(createPageUrl(`GDRoom?roomId=${room.id}`));
+
                                         } else {
-                                          navigate(createPageUrl('Dashboard'));
+                                          navigate(createPageUrl(`GDRoom?roomId=${room.id}`));
                                         }
                                       } catch (e) {}
                                     }}
