@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { createPageUrl } from '../utils';
 import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
-import { Trophy, ArrowLeft, Users, Clock, Building2, Globe, Lock, Calendar, Upload, X } from 'lucide-react';
+import { ArrowLeft, Building2, Calendar, Clock, Globe, Lock, Trophy, Upload, Users, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '../utils';
 
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function CreateTournament() {
   const navigate = useNavigate();
@@ -30,7 +30,10 @@ export default function CreateTournament() {
     max_participants: 100,
     domain: 'general',
     duration: 15,
-    start_date: ''
+    start_date: '',
+    prize: '',
+    rules: '',
+    password: ''
   });
 
   useEffect(() => {
@@ -43,12 +46,22 @@ export default function CreateTournament() {
   };
 
   const generateTournamentId = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let id = 'T';
-    for (let i = 0; i < 7; i++) {
-      id += chars.charAt(Math.floor(Math.random() * chars.length));
+    const length = 8 + Math.floor(Math.random() * 5); // 8-12 digits
+    let id = '';
+    for (let i = 0; i < length; i++) {
+      const digit = i === 0 ? (1 + Math.floor(Math.random() * 9)) : Math.floor(Math.random() * 10);
+      id += String(digit);
     }
     return id;
+  };
+
+  const generateTournamentPassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let pwd = '';
+    for (let i = 0; i < 8; i++) {
+      pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return pwd.toUpperCase();
   };
 
   const handleCreate = async () => {
@@ -60,6 +73,8 @@ export default function CreateTournament() {
     setLoading(true);
     try {
       const tournamentId = generateTournamentId();
+      const manualPassword = (formData.password || '').trim().toUpperCase();
+      const tournamentPassword = manualPassword || generateTournamentPassword();
       
       const tournament = await api.entities.Tournament.create({
         name: formData.name,
@@ -75,7 +90,10 @@ export default function CreateTournament() {
         start_date: formData.start_date || null,
         status: 'registering',
         host_id: user.email,
-        host_name: user.full_name
+        host_name: user.full_name,
+        prize: formData.prize,
+        rules: formData.rules,
+        password: tournamentPassword
       });
 
       // If CSV participants provided, create registrations and assign groups
@@ -90,13 +108,13 @@ export default function CreateTournament() {
           const group_number = (idx % groups) + 1;
           const user_id = p.email || p.user_id || p.id || String(idx);
           const user_name = p.name || p.full_name || p.user_name || '';
-          const payload = { tournament_id: tournament.tournament_id, user_id, user_name, status: 'registered', group_number };
+          const payload = { tournament_id: tournament.id, user_id, user_name, status: 'registered', group_number };
           return api.entities.TournamentRegistration.create(payload);
         });
         await Promise.all(creations);
       }
 
-      alert(`Tournament created successfully!\nTournament ID: ${tournamentId}\n${csvParticipants.length > 0 ? `${csvParticipants.length} participants registered.` : 'Share this ID with participants.'}`);
+      alert(`Tournament created successfully!\nTournament ID: ${tournamentId}\nTournament Password: ${tournamentPassword}\n${csvParticipants.length > 0 ? `${csvParticipants.length} participants registered.` : 'Share this ID and password with participants or let them discover it in the Tournament section.'}`);
       navigate(createPageUrl(`TournamentHub?type=${tournamentType}`));
     } catch (error) {
       console.error('Error creating tournament:', error);

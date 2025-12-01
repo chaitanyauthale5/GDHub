@@ -129,6 +129,20 @@ const entities = {
   SoloPracticeSession: makeEntity(entityToPath.SoloPracticeSession),
 };
 
+const tournaments = {
+  async register(payload) {
+    const { tournamentId, user_id, user_name, user_email, group_number, accepted_rules } = payload || {};
+    if (!tournamentId) throw new Error('Missing tournamentId');
+    return post(`/api/tournaments/${tournamentId}/register`, {
+      user_id,
+      user_name,
+      user_email,
+      group_number,
+      accepted_rules,
+    });
+  },
+};
+
 function ensureGuest() {
   try {
     const existing = localStorage.getItem('app_guest_user');
@@ -242,4 +256,4 @@ const zego = {
   },
 };
 
-export const api = { auth, entities, appLogs, integrations, zego };
+export const api = { auth, entities, appLogs, integrations, zego, tournaments };

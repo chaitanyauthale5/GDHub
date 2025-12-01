@@ -7,6 +7,7 @@ const rateLimit = require('express-rate-limit');
 const config = require('./config');
 const connectDB = require('./db');
 const createCrudRouter = require('./routes/crud');
+const { sendTournamentRegistrationEmail } = require('./utils/mailer');
 
 const User = require('./models/User');
 const UserProfile = require('./models/UserProfile');
@@ -98,6 +99,81 @@ app.post('/api/gd-rooms/:id/join', async (req, res) => {
         await room.save();
     }
     res.json(room);
+});
+
+function generateTournamentPassword() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let pwd = '';
+    for (let i = 0; i < 8; i++) {
+        pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return pwd;
+}
+
+app.post('/api/tournaments/:id/register', async (req, res) => {
+    try {
+        const { user_id, user_name, user_email, group_number, accepted_rules } = req.body || {};
+        if (!user_id || !user_email) return res.status(400).json({ message: 'Missing user details' });
+        if (!accepted_rules) return res.status(400).json({ message: 'You must accept the tournament rules to register' });
+
+        const tournament = await Tournament.findById(req.params.id);
+        if (!tournament) return res.status(404).json({ message: 'Tournament not found' });
+
+        if (tournament.status !== 'registering') {
+            return res.status(400).json({ message: 'Registration is not open for this tournament' });
+        }
+
+        const tournamentIdStr = tournament._id.toString();
+
+        const existing = await TournamentRegistration.findOne({ tournament_id: tournamentIdStr, user_id });
+        if (existing) {
+            return res.status(409).json({ message: 'User already registered for this tournament', registration: existing });
+        }
+
+        if (tournament.max_participants) {
+            const count = await TournamentRegistration.countDocuments({ tournament_id: tournamentIdStr });
+            if (count >= tournament.max_participants) {
+                return res.status(400).json({ message: 'Tournament is full' });
+            }
+        }
+
+        let password = (tournament.password || '').trim();
+        if (!password) {
+            password = generateTournamentPassword();
+            tournament.password = password.toUpperCase();
+            await tournament.save();
+        }
+        const normalizedPassword = password.toUpperCase();
+
+        const registration = await TournamentRegistration.create({
+            tournament_id: tournamentIdStr,
+            tournament_code: tournament.tournament_id,
+            user_id,
+            user_name,
+            user_email,
+            password: normalizedPassword,
+            status: 'registered',
+            group_number,
+            accepted_rules: true,
+            accepted_at: new Date(),
+        });
+
+        const registrationId = registration._id.toString();
+
+        await sendTournamentRegistrationEmail({
+            to: user_email,
+            userName: user_name || user_id,
+            tournament,
+            password: normalizedPassword,
+            registrationId,
+        });
+
+        const plain = registration.toObject ? registration.toObject() : registration;
+        res.status(201).json({ ...plain, id: registrationId });
+    } catch (e) {
+        console.error('Tournament registration error', e);
+        res.status(500).json({ message: 'Server error' });
+    }
 });
 
 app.post('/api/debate-rooms/:id/join', async (req, res) => {
