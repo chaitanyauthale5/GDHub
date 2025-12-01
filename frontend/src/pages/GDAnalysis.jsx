@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import { api } from '@/api/apiClient';
+import { analyzeTranscript } from '@/api/geminiClient';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { api } from '@/api/apiClient';
 
 import { motion } from 'framer-motion';
-import { Award, TrendingUp, AlertCircle, CheckCircle, Users, Clock, MessageSquare, Home, RotateCcw } from 'lucide-react';
+import { AlertCircle, Award, CheckCircle, Clock, Home, MessageSquare, RotateCcw, TrendingUp, Users } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
 
 export default function GDAnalysis() {
@@ -73,6 +74,67 @@ export default function GDAnalysis() {
 
   const generateAnalysis = async (sessionData) => {
     try {
+      if (sessionData?.room_id) {
+        const transcripts = await api.entities.GDTranscript.filter({ room_id: sessionData.room_id });
+        const combined = (transcripts || [])
+          .sort((a, b) => (a.start_ms || 0) - (b.start_ms || 0))
+          .map(t => `${t.user_name || t.user_id || 'Participant'}: ${t.text}`)
+          .join('\n');
+
+        if (combined) {
+          const gemini = await analyzeTranscript({
+            transcript: combined,
+            topic: sessionData.topic || 'Group Discussion',
+          });
+
+          if (gemini && typeof gemini === 'object') {
+            const overall = Number.isFinite(Number(gemini.overallScore)) ? Math.round(Number(gemini.overallScore)) : 0;
+            const participationScore = Number.isFinite(Number(gemini.confidenceScore)) ? Math.round(Number(gemini.confidenceScore)) : overall;
+            const communicationScore = Number.isFinite(Number(gemini.clarityScore)) ? Math.round(Number(gemini.clarityScore)) : overall;
+            const knowledgeScore = Number.isFinite(Number(gemini.vocabularyScore)) ? Math.round(Number(gemini.vocabularyScore)) : overall;
+            const teamworkScore = Number.isFinite(Number(gemini.fluencyScore)) ? Math.round(Number(gemini.fluencyScore)) : overall;
+
+            setAnalysis({
+              overallScore: overall,
+              participationScore,
+              communicationScore,
+              knowledgeScore,
+              teamworkScore,
+              strengths: Array.isArray(gemini.strengths) ? gemini.strengths : [],
+              improvements: Array.isArray(gemini.improvements) ? gemini.improvements : [],
+              detailedFeedback: gemini.detailedFeedback || gemini.summary || '',
+              tips: Array.isArray(gemini.practiceExercises) ? gemini.practiceExercises : (Array.isArray(gemini.suggestions) ? gemini.suggestions : []),
+            });
+            return;
+          }
+        }
+      } else if (sessionData?.transcript) {
+        const gemini = await analyzeTranscript({
+          transcript: sessionData.transcript,
+          topic: sessionData.topic || 'Group Discussion',
+        });
+        if (gemini && typeof gemini === 'object') {
+          const overall = Number.isFinite(Number(gemini.overallScore)) ? Math.round(Number(gemini.overallScore)) : 0;
+          const participationScore = Number.isFinite(Number(gemini.confidenceScore)) ? Math.round(Number(gemini.confidenceScore)) : overall;
+          const communicationScore = Number.isFinite(Number(gemini.clarityScore)) ? Math.round(Number(gemini.clarityScore)) : overall;
+          const knowledgeScore = Number.isFinite(Number(gemini.vocabularyScore)) ? Math.round(Number(gemini.vocabularyScore)) : overall;
+          const teamworkScore = Number.isFinite(Number(gemini.fluencyScore)) ? Math.round(Number(gemini.fluencyScore)) : overall;
+
+          setAnalysis({
+            overallScore: overall,
+            participationScore,
+            communicationScore,
+            knowledgeScore,
+            teamworkScore,
+            strengths: Array.isArray(gemini.strengths) ? gemini.strengths : [],
+            improvements: Array.isArray(gemini.improvements) ? gemini.improvements : [],
+            detailedFeedback: gemini.detailedFeedback || gemini.summary || '',
+            tips: Array.isArray(gemini.practiceExercises) ? gemini.practiceExercises : (Array.isArray(gemini.suggestions) ? gemini.suggestions : []),
+          });
+          return;
+        }
+      }
+
       const response = await api.integrations.Core.InvokeLLM({
         prompt: `Analyze this group discussion session and provide detailed feedback:
 
@@ -126,25 +188,53 @@ Generate a comprehensive analysis in JSON format with:
         const totalMs = items.reduce((sum, t) => sum + Math.max(0, (t.end_ms || 0) - (t.start_ms || 0)), 0);
         const text = items.map(t => t.text).join(' ').slice(0, 4000);
         const name = p.name || items[0]?.user_name || 'Participant';
-        let ai;
-        try {
-          ai = await api.integrations.Core.InvokeLLM({
-            prompt: `Analyze the following participant's contributions in a group discussion. Provide scores and feedback.\n\nParticipant: ${name}\nTopic: ${sessionData.topic}\nTranscript (may be partial):\n${text}\n\nReturn JSON with keys: overallScore (0-100), communicationScore (0-100), knowledgeScore (0-100), participationSummary (1-2 sentences), strengths (3 items), improvements (3 items).`,
-            response_json_schema: {
-              type: 'object',
-              properties: {
-                overallScore: { type: 'number' },
-                communicationScore: { type: 'number' },
-                knowledgeScore: { type: 'number' },
-                participationSummary: { type: 'string' },
-                strengths: { type: 'array', items: { type: 'string' } },
-                improvements: { type: 'array', items: { type: 'string' } },
-              },
-            },
-          });
-        } catch (e) {
-          ai = null;
+        let ai = null;
+
+        if (text) {
+          try {
+            const gemini = await analyzeTranscript({
+              transcript: text,
+              topic: sessionData.topic || 'Group Discussion',
+            });
+            if (gemini && typeof gemini === 'object') {
+              const overallScore = Number.isFinite(Number(gemini.overallScore)) ? Math.round(Number(gemini.overallScore)) : 0;
+              const communicationScore = Number.isFinite(Number(gemini.clarityScore)) ? Math.round(Number(gemini.clarityScore)) : overallScore;
+              const knowledgeScore = Number.isFinite(Number(gemini.vocabularyScore)) ? Math.round(Number(gemini.vocabularyScore)) : overallScore;
+              ai = {
+                overallScore,
+                communicationScore,
+                knowledgeScore,
+                participationSummary: gemini.summary || gemini.detailedFeedback || '',
+                strengths: Array.isArray(gemini.strengths) ? gemini.strengths : [],
+                improvements: Array.isArray(gemini.improvements) ? gemini.improvements : [],
+              };
+            }
+          } catch (e) {
+            ai = null;
+          }
         }
+
+        if (!ai) {
+          try {
+            ai = await api.integrations.Core.InvokeLLM({
+              prompt: `Analyze the following participant's contributions in a group discussion. Provide scores and feedback.\n\nParticipant: ${name}\nTopic: ${sessionData.topic}\nTranscript (may be partial):\n${text}\n\nReturn JSON with keys: overallScore (0-100), communicationScore (0-100), knowledgeScore (0-100), participationSummary (1-2 sentences), strengths (3 items), improvements (3 items).`,
+              response_json_schema: {
+                type: 'object',
+                properties: {
+                  overallScore: { type: 'number' },
+                  communicationScore: { type: 'number' },
+                  knowledgeScore: { type: 'number' },
+                  participationSummary: { type: 'string' },
+                  strengths: { type: 'array', items: { type: 'string' } },
+                  improvements: { type: 'array', items: { type: 'string' } },
+                },
+              },
+            });
+          } catch (e) {
+            ai = null;
+          }
+        }
+
         results.push({ userId: p.user_id, name, talkTimeSec: Math.round(totalMs / 1000), ai });
       }
       setPerUser(results);
