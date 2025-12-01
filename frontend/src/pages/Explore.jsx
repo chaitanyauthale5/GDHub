@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { motion } from 'framer-motion';
-import { MessageSquare, Mic, Bot, Sparkles, Swords, UserCheck } from 'lucide-react';
+import { MessageSquare, Mic, Bot, UserCheck } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
 
@@ -25,15 +25,6 @@ export default function Explore() {
       icon: Mic,
       gradient: 'from-orange-400 to-pink-500',
       link: 'ExtemporePractice'
-    },
-    {
-      id: 'debate',
-      title: 'Debate',
-      subtitle: 'Start Debate',
-      description: 'Practice structured debates and argumentation',
-      icon: Swords,
-      gradient: 'from-red-400 to-orange-500',
-      link: 'DebateArena'
     },
     {
       id: 'ai-interview',
