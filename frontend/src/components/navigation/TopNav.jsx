@@ -13,6 +13,7 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
   const [showChat, setShowChat] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [friendRequests, setFriendRequests] = useState([]);
   const [friends, setFriends] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
@@ -35,11 +36,16 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
     const handleFriendRequestNotification = () => {
       loadNotifications();
     };
+    const handleRoomInviteNotification = () => {
+      loadNotifications();
+    };
 
     socket.on('friend_request_notification', handleFriendRequestNotification);
+    socket.on('room_invite_notification', handleRoomInviteNotification);
 
     return () => {
       socket.off('friend_request_notification', handleFriendRequestNotification);
+      socket.off('room_invite_notification', handleRoomInviteNotification);
     };
   }, [socket, currentUser]);
 
@@ -64,12 +70,10 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
       });
       setFriendRequests(pendingRequests);
 
-      // Get notifications
-      const notifs = await api.entities.Notification.filter({
-        user_id: me.email,
-        is_read: false
-      });
+      // Get notifications (all, newest first)
+      const notifs = await api.entities.Notification.filter({ user_id: me.email }, '-created_date', 50);
       setNotifications(notifs);
+      setUnreadCount((notifs || []).filter(n => !n.is_read).length);
 
       // Get friends for chat - check both email and id
       let profileData = await api.entities.UserProfile.filter({ user_id: me.email });
@@ -150,14 +154,6 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
     setShowNotifications(willOpen);
     setShowChat(false);
     setShowProfileMenu(false);
-    if (willOpen && currentUser) {
-      try {
-        const unread = await api.entities.Notification.filter({ user_id: currentUser.email, is_read: false });
-        await Promise.all(unread.map(n => api.entities.Notification.update(n.id, { is_read: true })));
-        // refresh counts
-        loadNotifications();
-      } catch (e) { }
-    }
   };
 
   return (
@@ -209,9 +205,9 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                   className="p-2.5 sm:p-3 rounded-full bg-gray-100 hover:bg-gray-200 transition-all relative"
                 >
                   <Bell className="w-5 h-5 text-gray-700" />
-                  {(friendRequests.length > 0 || notifications.length > 0) && (
+                  {(friendRequests.length > 0 || unreadCount > 0) && (
                     <span className="absolute top-1 right-1 w-5 h-5 bg-red-500 rounded-full text-white text-xs flex items-center justify-center font-bold">
-                      {friendRequests.length + notifications.length}
+                      {friendRequests.length + unreadCount}
                     </span>
                   )}
                 </button>
@@ -222,25 +218,44 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
-                      className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl p-4 shadow-2xl border border-gray-100 z-50 max-h-96 overflow-y-auto"
+                      className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl p-4 shadow-2xl border border-gray-100 z-50"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="font-bold text-lg">Notifications</h3>
-                        {(friendRequests.length > 0 || notifications.length > 0) && (
+                        <div className="flex items-center gap-3">
+                          {unreadCount > 0 && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const unread = await api.entities.Notification.filter({ user_id: currentUser.email, is_read: false });
+                                  await Promise.all(unread.map(n => api.entities.Notification.update(n.id, { is_read: true })));
+                                  loadNotifications();
+                                } catch {}
+                              }}
+                              className="text-xs font-bold text-blue-600 hover:underline"
+                            >
+                              Mark all as read
+                            </button>
+                          )}
                           <button
                             onClick={async () => {
                               try {
-                                const unread = await api.entities.Notification.filter({ user_id: currentUser.email, is_read: false });
-                                await Promise.all(unread.map(n => api.entities.Notification.update(n.id, { is_read: true })));
+                                const me = await api.auth.me();
+                                if (!me) return;
+                                const all = await api.entities.Notification.filter({ user_id: me.email });
+                                await Promise.all((all || []).map(n => api.entities.Notification.delete(n.id)));
                                 loadNotifications();
                               } catch {}
                             }}
-                            className="text-xs font-bold text-blue-600 hover:underline"
+                            className="text-xs font-bold text-red-600 hover:underline"
                           >
-                            Mark all as read
+                            Clear all
                           </button>
-                        )}
+                        </div>
                       </div>
+
+                      {/* Scrollable list area - header & footer stay visible */}
+                      <div className="max-h-72 overflow-y-auto">
 
                       {/* Friend Requests */}
                       {friendRequests.length > 0 && (
@@ -292,6 +307,11 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                                   <button
                                     onClick={async () => {
                                       try {
+                                        const stillValid = await api.entities.Notification.filter({ id: notif.id });
+                                        if (!stillValid || stillValid.length === 0) {
+                                          loadNotifications();
+                                          return;
+                                        }
                                         const me = await api.auth.me();
                                         const rooms = await api.entities.GDRoom.filter({ id: notif.room_id });
                                         if (rooms.length === 0) return;
@@ -301,11 +321,13 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                                           const updated = { participants: [ ...(room.participants || []), { user_id: me.email, name: me.full_name, joined_at: new Date().toISOString() } ] };
                                           await api.entities.GDRoom.update(room.id, updated);
                                         }
-                                        await api.entities.Notification.update(notif.id, { is_read: true });
+                                        const allInvites = await api.entities.Notification.filter({ user_id: me.email, type: 'room_invite', room_id: room.id });
+                                        await Promise.all((allInvites || []).map(n => api.entities.Notification.delete(n.id)));
+                                        loadNotifications();
                                         if (room.status === 'lobby') {
                                           navigate(createPageUrl(`Lobby?roomId=${room.id}`));
                                         } else if (room.status === 'active') {
-                                          navigate(createPageUrl(`GDPrepare?roomId=${room.id}`));
+                                          navigate(createPageUrl(`GDRoom?roomId=${room.id}`));
                                         } else {
                                           navigate(createPageUrl('Dashboard'));
                                         }
@@ -315,12 +337,30 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                                   >
                                     Accept & Join
                                   </button>
+                                  {!notif.is_read && (
+                                    <button
+                                      onClick={async () => { try { await api.entities.Notification.update(notif.id, { is_read: true }); loadNotifications(); } catch {} }}
+                                      className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs font-bold"
+                                    >
+                                      Mark read
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                              {notif.type !== 'room_invite' && !notif.is_read && (
+                                <div className="flex gap-2">
                                   <button
                                     onClick={async () => { try { await api.entities.Notification.update(notif.id, { is_read: true }); loadNotifications(); } catch {} }}
                                     className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs font-bold"
                                   >
                                     Mark read
                                   </button>
+                                </div>
+                              )}
+                              {notif.is_read && (
+                                <div className="text-xs text-gray-400 flex items-center gap-1">
+                                  <Check className="w-4 h-4" />
+                                  Read
                                 </div>
                               )}
                             </div>
@@ -332,6 +372,10 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                           <p className="text-sm">No new notifications</p>
                         </div>
                       ) : null}
+
+                      </div>
+
+                      
                     </motion.div>
                   )}
                 </AnimatePresence>

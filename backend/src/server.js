@@ -233,6 +233,12 @@ const start = async () => {
             io.to(roomName).emit('friend_request_notification', payload);
         });
 
+        socket.on('room_invite_notification', (payload) => {
+            if (!payload || !payload.to_user_id) return;
+            const roomName = `user:${payload.to_user_id}`;
+            io.to(roomName).emit('room_invite_notification', payload);
+        });
+
         socket.on('send_message', (data) => {
             // data: { room, message, from_user_id, ... }
             // Broadcast to everyone in the room INCLUDING sender (or exclude if handled optimistically on client)
