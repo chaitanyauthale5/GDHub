@@ -1,13 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
+import { api } from '@/api/apiClient';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { api } from '@/api/apiClient';
-import { motion } from 'framer-motion';
 
-import { X, Clock, Users, MessageSquare, ArrowLeft, Bot } from 'lucide-react';
-import useWebRTC from '@/hooks/useWebRTC';
 import useSpeechToTranscript from '@/hooks/useSpeechToTranscript';
+import useZegoCall from '@/hooks/useZegoCall';
+import { ArrowLeft, Bot, Clock, MessageSquare, Users, X } from 'lucide-react';
 
 export default function GDRoom() {
   const navigate = useNavigate();
@@ -48,12 +47,22 @@ export default function GDRoom() {
     return () => clearInterval(timer);
   }, [timeLeft]);
 
-  // WebRTC media and signaling
-  const { localStream, remoteStreams, micOn, cameraOn, toggleMic, toggleCamera, mediaError, retryDevices, diagnostics, stopLocalTracks } = useWebRTC({
+  // ZEGOCLOUD media (replaces custom WebRTC)
+  const {
+    localStream,
+    remoteStreams,
+    micOn,
+    cameraOn,
+    toggleMic,
+    toggleCamera,
+    mediaError,
+    retryDevices,
+    diagnostics,
+    stopLocalTracks,
+  } = useZegoCall({
     roomId,
-    me: user,
-    maxParticipants: room?.team_size || 8,
-    sendMedia: true,
+    user,
+    autoJoin: true,
   });
   const [showDebug, setShowDebug] = useState(false);
 
@@ -241,11 +250,11 @@ export default function GDRoom() {
         </button>
         {showDebug && (
           <div className="mt-2 text-xs p-3 rounded bg-black/70 text-white max-w-xs space-y-1">
-            <div><span className="opacity-70">socket:</span> {diagnostics?.socketId || '—'}</div>
-            <div><span className="opacity-70">peers:</span> {(diagnostics?.peers || []).join(', ') || '—'}</div>
-            <div><span className="opacity-70">remotes:</span> {(diagnostics?.remotes || []).join(', ') || '—'}</div>
-            <div><span className="opacity-70">last:</span> {diagnostics?.lastSignal ? `${diagnostics.lastSignal.type} from ${diagnostics.lastSignal.from}` : '—'}</div>
-            <div className="max-h-40 overflow-auto whitespace-pre-wrap break-all"><span className="opacity-70">pcs:</span> {JSON.stringify(diagnostics?.pcs || {}, null, 0)}</div>
+            <div><span className="opacity-70">room:</span> {diagnostics?.roomID || roomId || '—'}</div>
+            <div><span className="opacity-70">state:</span> {diagnostics?.roomState || 'unknown'}</div>
+            <div><span className="opacity-70">user:</span> {diagnostics?.userID || user?.email || user?.id || '—'}</div>
+            <div><span className="opacity-70">code:</span> {typeof diagnostics?.lastErrorCode === 'number' ? diagnostics.lastErrorCode : 0}</div>
+            <div><span className="opacity-70">appID:</span> {diagnostics?.appID || '—'}</div>
           </div>
         )}
       </div>

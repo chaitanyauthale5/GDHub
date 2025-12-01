@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { createPageUrl } from '../utils';
 import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '../utils';
 
-import { Clock, Users, BookOpen, Sparkles } from 'lucide-react';
+import { BookOpen, Clock, Sparkles, Users } from 'lucide-react';
 
 export default function GDPrepare() {
   const navigate = useNavigate();
@@ -35,7 +35,7 @@ export default function GDPrepare() {
 
   useEffect(() => {
     if (timeLeft <= 0) {
-      navigate(createPageUrl(`GDRoom?roomId=${roomId}`));
+      navigate(createPageUrl(`Call?roomId=${roomId}`));
       return;
     }
 

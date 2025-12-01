@@ -1,0 +1,181 @@
+import useZegoCall from '@/hooks/useZegoCall';
+import { useAuth } from '@/lib/AuthContext';
+import { AlertCircle, ArrowLeft, Mic, MicOff, PhoneOff, Video, VideoOff } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { createPageUrl } from '../utils';
+
+export default function Call() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
+
+  const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const roomId = params.get('roomId') || params.get('roomID') || params.get('roomid');
+
+  const [localVideoEl, setLocalVideoEl] = useState(null);
+  const [remoteVideoEls, setRemoteVideoEls] = useState({}); // streamID -> video element
+
+  const {
+    localStream,
+    remoteStreams,
+    micOn,
+    cameraOn,
+    toggleMic,
+    toggleCamera,
+    mediaError,
+    retryDevices,
+    diagnostics,
+    leaveRoom,
+    isJoined,
+    isJoining,
+    attachStreamToVideoElement,
+  } = useZegoCall({ roomId, user, autoJoin: true });
+
+  useEffect(() => {
+    if (localVideoEl && localStream) {
+      attachStreamToVideoElement(localVideoEl, localStream, { muted: true });
+    }
+  }, [localVideoEl, localStream, attachStreamToVideoElement]);
+
+  useEffect(() => {
+    Object.entries(remoteStreams || {}).forEach(([streamID, stream]) => {
+      const el = remoteVideoEls[streamID];
+      if (el && stream) {
+        attachStreamToVideoElement(el, stream, { muted: false });
+      }
+    });
+  }, [remoteStreams, remoteVideoEls, attachStreamToVideoElement]);
+
+  const handleEndCall = async () => {
+    try {
+      await leaveRoom();
+    } finally {
+      navigate(createPageUrl('Dashboard'));
+    }
+  };
+
+  if (!roomId) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-900 text-white">
+        <div className="text-center space-y-3">
+          <AlertCircle className="w-10 h-10 mx-auto text-red-400" />
+          <h2 className="text-xl font-bold">Missing roomId</h2>
+          <p className="text-sm text-gray-300">Provide a ?roomId=ROOM_ID query parameter to join a call.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-screen bg-gray-900 flex flex-col">
+      {/* Top bar */}
+      <div className="bg-gray-800 px-4 py-3 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-3 text-white">
+          <button
+            onClick={handleEndCall}
+            className="flex items-center gap-2 text-white/80 hover:text-white"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="text-sm">
+            <div className="font-bold">Room: {roomId}</div>
+            <div className="text-xs text-gray-300">
+              {isJoining ? 'Connecting…' : isJoined ? 'In call' : 'Idle'}
+            </div>
+          </div>
+        </div>
+
+        <div className="text-right text-xs text-gray-300">
+          <div>appID: {diagnostics.appID || '—'}</div>
+          <div>userID: {diagnostics.userID || (user?.email || user?.id || '—')}</div>
+          <div>state: {diagnostics.roomState}</div>
+        </div>
+      </div>
+
+      {/* Video grid */}
+      <div className="flex-1 p-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 bg-gray-900">
+        {/* Local tile */}
+        <div className="relative rounded-xl overflow-hidden bg-gray-800 aspect-video">
+          {localStream ? (
+            <video
+              ref={setLocalVideoEl}
+              data-self="true"
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400">
+              {mediaError ? 'Mic/Camera blocked or unavailable' : isJoining ? 'Connecting…' : 'Waiting to join…'}
+            </div>
+          )}
+          <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded">
+            You
+          </div>
+        </div>
+
+        {/* Remote tiles */}
+        {Object.entries(remoteStreams || {}).map(([streamID]) => (
+          <div key={streamID} className="relative rounded-xl overflow-hidden bg-gray-800 aspect-video">
+            <video
+              ref={(el) => {
+                if (!el) return;
+                setRemoteVideoEls((prev) => (prev[streamID] === el ? prev : { ...prev, [streamID]: el }));
+              }}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded">
+              {streamID}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Error banner */}
+      {mediaError && (
+        <div className="bg-red-600 text-white text-sm px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" />
+            <span>{String(mediaError)}</span>
+          </div>
+          <button
+            onClick={retryDevices}
+            className="text-xs font-bold px-3 py-1 rounded bg-white/10 hover:bg-white/20"
+          >
+            Retry Devices
+          </button>
+        </div>
+      )}
+
+      {/* Controls */}
+      <div className="bg-gray-800 px-4 py-3 flex items-center gap-4 justify-center flex-shrink-0">
+        <button
+          onClick={toggleMic}
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all ${
+            micOn ? 'bg-green-600 text-white' : 'bg-gray-600 text-white'
+          }`}
+        >
+          {micOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+          <span>{micOn ? 'Mic On' : 'Mic Off'}</span>
+        </button>
+
+        <button
+          onClick={toggleCamera}
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all ${
+            cameraOn ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'
+          }`}
+        >
+          {cameraOn ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
+          <span>{cameraOn ? 'Camera On' : 'Camera Off'}</span>
+        </button>
+
+        <button
+          onClick={handleEndCall}
+          className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold bg-red-600 hover:bg-red-700 text-white"
+        >
+          <PhoneOff className="w-4 h-4" />
+          <span>End Call</span>
+        </button>
+      </div>
+    </div>
+  );
+}

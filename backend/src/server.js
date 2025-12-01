@@ -26,6 +26,7 @@ const SoloPracticeSession = require('./models/SoloPracticeSession');
 const AIInterviewSession = require('./models/AIInterviewSession');
 
 const authRoutes = require('./routes/auth');
+const tokenRoutes = require('./routes/token');
 
 const app = express();
 
@@ -64,6 +65,7 @@ app.use('/api/ai-interviews', createCrudRouter(AIInterview));
 app.use('/api/chat-messages', createCrudRouter(ChatMessage));
 app.use('/api/extempore-topics', createCrudRouter(ExtemporeTopic));
 app.use('/api/solo-practice-sessions', createCrudRouter(SoloPracticeSession));
+app.use('/api/zego', tokenRoutes);
 app.use('/api/ai-interview-sessions', createCrudRouter(AIInterviewSession));
 
 app.post('/api/friend-requests/:id/accept', async (req, res) => {
@@ -147,9 +149,6 @@ const start = async () => {
         }
     });
 
-    // In-memory presence for WebRTC signaling (roomId -> { userId: socketId })
-    const webrtcPresence = new Map();
-
     io.on('connection', (socket) => {
         console.log('User connected:', socket.id);
 
@@ -163,68 +162,6 @@ const start = async () => {
             const roomName = `user:${userId}`;
             socket.join(roomName);
             console.log(`User ${socket.id} registered room ${roomName}`);
-        });
-
-        // --- WebRTC signaling rooms ---
-        socket.on('webrtc:join', (payload = {}) => {
-            let { roomId, userId, clientId } = payload;
-            if (!roomId || !userId) return;
-            if (!clientId) clientId = socket.id;
-            const sigRoom = `webrtc:${roomId}`;
-            socket.join(sigRoom);
-            // update presence (clientId -> { socketId, userId })
-            if (!webrtcPresence.has(roomId)) webrtcPresence.set(roomId, new Map());
-            const roomMap = webrtcPresence.get(roomId);
-            // existing peers list (exclude the joiner)
-            const existingPeers = Array.from(roomMap.entries())
-                .filter(([cid]) => cid !== clientId)
-                .map(([cid, info]) => ({ clientId: cid, userId: info.userId }));
-            roomMap.set(clientId, { socketId: socket.id, userId });
-            // notify the joiner about current peers
-            socket.emit('webrtc:peers', { roomId, peers: existingPeers });
-            // notify others about new user
-            io.to(sigRoom).emit('webrtc:user-joined', { clientId, userId });
-        });
-
-        socket.on('webrtc:signal', (payload = {}) => {
-            const { roomId, from, target, data } = payload;
-            if (!roomId || !from || !data) return;
-            const sigRoom = `webrtc:${roomId}`;
-            // Broadcast to all in signaling room; clients filter by 'target'
-            io.to(sigRoom).emit('webrtc:signal', { from, target, data });
-        });
-
-        socket.on('webrtc:leave', (payload = {}) => {
-            const { roomId, userId, clientId } = payload;
-            if (!roomId || !userId) return;
-            const sigRoom = `webrtc:${roomId}`;
-            socket.leave(sigRoom);
-            const roomMap = webrtcPresence.get(roomId);
-            if (roomMap) {
-                if (clientId) roomMap.delete(clientId);
-                else {
-                    // fallback: delete any entries matching userId
-                    for (const [cid, info] of roomMap.entries()) {
-                        if (info.userId === userId) roomMap.delete(cid);
-                    }
-                }
-                if (roomMap.size === 0) webrtcPresence.delete(roomId);
-            }
-            io.to(sigRoom).emit('webrtc:user-left', { clientId, userId });
-        });
-
-        socket.on('disconnect', () => {
-            // best-effort cleanup across rooms
-            for (const [roomId, map] of webrtcPresence.entries()) {
-                for (const [clientId, info] of map.entries()) {
-                    if (info.socketId === socket.id) {
-                        map.delete(clientId);
-                        io.to(`webrtc:${roomId}`).emit('webrtc:user-left', { clientId, userId: info.userId });
-                    }
-                }
-                if (map.size === 0) webrtcPresence.delete(roomId);
-            }
-            console.log('User disconnected:', socket.id);
         });
 
         socket.on('friend_request_notification', (payload) => {
@@ -255,8 +192,6 @@ const start = async () => {
             io.to(fromRoom).emit('message_read', payload);
             io.to(toRoom).emit('message_read', payload);
         });
-
-        // (disconnect handler moved above for presence cleanup)
     });
 
     // Make io accessible in routes if needed

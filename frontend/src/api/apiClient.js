@@ -10,7 +10,11 @@ const inferBase = () => {
     return 'http://localhost:5000';
   }
 };
-const API_BASE_URL = (typeof globalThis !== 'undefined' && globalThis['__API_BASE_URL__']) || inferBase();
+export const API_BASE_URL =
+  // 1) Prefer build-time Vite env, shared across all devices
+  (typeof import.meta !== 'undefined' && import.meta && import.meta['env'] && import.meta['env'].VITE_API_BASE_URL)
+  // 2) Then any runtime override injected on window (set via localStorage api_base_url)
+  || ((typeof globalThis !== 'undefined' && globalThis['__API_BASE_URL__']) || inferBase());
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
@@ -232,4 +236,10 @@ const integrations = {
   }
 };
 
-export const api = { auth, entities, appLogs, integrations };
+const zego = {
+  async getRoomToken({ roomId, user_id, user_name }) {
+    return post('/api/zego/token', { roomId, user_id, user_name });
+  },
+};
+
+export const api = { auth, entities, appLogs, integrations, zego };

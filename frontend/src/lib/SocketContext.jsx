@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/api/apiClient';
 import { createContext, useContext, useEffect, useState } from 'react';
 import io from 'socket.io-client';
 import { useAuth } from './AuthContext';
@@ -24,7 +25,7 @@ export const SocketProvider = ({ children }) => {
             }
         })();
         const envUrl = (typeof globalThis !== 'undefined' && globalThis['__API_BASE_URL__']) || null;
-        const backendUrl = envUrl || inferredUrl;
+        const backendUrl = API_BASE_URL || envUrl || inferredUrl;
         const newSocket = io(backendUrl, {
             withCredentials: true,
             transports: ['websocket', 'polling'],

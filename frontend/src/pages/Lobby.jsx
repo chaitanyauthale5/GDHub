@@ -47,9 +47,9 @@ export default function Lobby() {
         const fetchedRoom = roomData[0];
         setRoom(fetchedRoom);
 
-        // If room status changed to active, navigate straight to room (skip prepare)
+        // If room status changed to active, navigate straight to call (skip prepare)
         if (fetchedRoom.status === 'active') {
-          navigate(createPageUrl(`GDRoom?roomId=${fetchedRoom.id}`));
+          navigate(createPageUrl(`Call?roomId=${fetchedRoom.id}`));
         } else if (fetchedRoom.status === 'completed') {
           // Host ended the room; redirect everyone out
           navigate(createPageUrl('Dashboard'));
@@ -121,8 +121,8 @@ export default function Lobby() {
       started_at: new Date().toISOString()
     });
 
-    // Navigate straight to room
-    navigate(createPageUrl(`GDRoom?roomId=${room.id}`));
+    // Navigate straight to call
+    navigate(createPageUrl(`Call?roomId=${room.id}`));
   };
 
   const exitRoom = async () => {
@@ -380,7 +380,7 @@ export default function Lobby() {
                 className="w-full py-6 rounded-3xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold text-xl shadow-xl hover:shadow-2xl transition-all flex items-center justify-center gap-3"
               >
                 <Play className="w-8 h-8" />
-                Start WebRTC Session
+                Start Call
               </motion.button>
               <p className="text-center text-sm text-gray-600 mt-3">
                 Click to start the group discussion

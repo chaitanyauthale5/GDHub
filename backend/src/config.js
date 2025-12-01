@@ -6,5 +6,9 @@ module.exports = {
     jwtSecret: process.env.JWT_SECRET || 'change-me',
     mongoUri: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/speakup',
     corsOrigins: getOrigins(),
-    nodeEnv: process.env.NODE_ENV || 'development'
+    nodeEnv: process.env.NODE_ENV || 'development',
+    zegoAppId: Number(process.env.ZEGO_APP_ID || '0'),
+    zegoServerSecret: process.env.ZEGO_SERVER_SECRET || '',
+    zegoServerUrl: process.env.ZEGO_SERVER_URL || '',
+    zegoTokenExpirationSeconds: Number(process.env.ZEGO_TOKEN_EXPIRATION_TIME || '3600')
 };

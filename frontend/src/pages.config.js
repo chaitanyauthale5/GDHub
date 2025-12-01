@@ -4,6 +4,7 @@ import AIInterviewAnalysis from './pages/AIInterviewAnalysis';
 import AIInterviewHub from './pages/AIInterviewHub';
 import AIInterviewRoom from './pages/AIInterviewRoom';
 import BrowseRooms from './pages/BrowseRooms';
+import Call from './pages/Call';
 import Chat from './pages/Chat';
 import Contact from './pages/Contact';
 import CreateDebateRoom from './pages/CreateDebateRoom';
@@ -81,6 +82,7 @@ export const PAGES = {
     "UserProfile": UserProfile,
     "Chat": Chat,
     "Progress": Progress,
+    "Call": Call,
     "Login": Login,
     "Register": Register,
     "Contact": Contact,

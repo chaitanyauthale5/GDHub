@@ -361,10 +361,10 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                                           navigate(createPageUrl(`Lobby?roomId=${room.id}`));
 
                                         } else if (room.status === 'active') {
-                                          navigate(createPageUrl(`GDRoom?roomId=${room.id}`));
+                                          navigate(createPageUrl(`Call?roomId=${room.id}`));
 
                                         } else {
-                                          navigate(createPageUrl(`GDRoom?roomId=${room.id}`));
+                                          navigate(createPageUrl(`Call?roomId=${room.id}`));
                                         }
                                       } catch (e) {}
                                     }}

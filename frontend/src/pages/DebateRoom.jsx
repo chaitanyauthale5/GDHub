@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import { api } from '@/api/apiClient';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { api } from '@/api/apiClient';
-import { motion } from 'framer-motion';
 
-import { Swords, Clock, ThumbsUp, ThumbsDown, X, ArrowLeft, LogOut, Bot } from 'lucide-react';
-import useWebRTC from '@/hooks/useWebRTC';
 import useSpeechToTranscript from '@/hooks/useSpeechToTranscript';
+import useZegoCall from '@/hooks/useZegoCall';
+import { ArrowLeft, Bot, Clock, LogOut, Swords, ThumbsDown, ThumbsUp } from 'lucide-react';
 
 export default function DebateRoom() {
   const navigate = useNavigate();
@@ -38,12 +37,20 @@ export default function DebateRoom() {
     }
   }, [room, timeLeft]);
 
-  // WebRTC setup (always publish media)
-  const { localStream, remoteStreams, micOn, cameraOn, toggleMic, toggleCamera, mediaError, retryDevices } = useWebRTC({
+  // ZEGOCLOUD setup (always publish media)
+  const {
+    localStream,
+    remoteStreams,
+    micOn,
+    cameraOn,
+    toggleMic,
+    toggleCamera,
+    mediaError,
+    retryDevices,
+  } = useZegoCall({
     roomId,
-    me: user,
-    maxParticipants: room?.team_size || 8,
-    sendMedia: true,
+    user,
+    autoJoin: true,
   });
   useSpeechToTranscript({ enabled: sessionActive && !!roomId && !!user, roomId, user, sessionType: 'debate' });
 

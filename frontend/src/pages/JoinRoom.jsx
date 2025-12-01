@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { createPageUrl } from '../utils';
 import { api } from '@/api/apiClient';
+import { Input } from '@/components/ui/input';
 import { motion } from 'framer-motion';
-import { LogIn, Hash, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Hash, LogIn } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
-import { Input } from '@/components/ui/input';
+import { createPageUrl } from '../utils';
 
 export default function JoinRoom() {
   const navigate = useNavigate();
@@ -67,10 +67,10 @@ export default function JoinRoom() {
       // Get the most recent room with this code
       const room = rooms[0];
 
-      // Check if room is active (already started with Jitsi)
+      // Check if room is active (already started with ZEGOCLOUD call)
       if (room.status === 'active') {
-        // Directly join the Jitsi meeting
-        navigate(createPageUrl(`GDRoom?roomId=${room.id}`));
+        // Directly join the ongoing call
+        navigate(createPageUrl(`Call?roomId=${room.id}`));
         return;
       }
 
