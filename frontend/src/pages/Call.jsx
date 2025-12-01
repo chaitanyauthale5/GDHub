@@ -1,10 +1,11 @@
 import AI3DAvatar from '@/components/shared/AI3DAvatar';
 import useZegoCall from '@/hooks/useZegoCall';
 import { useAuth } from '@/lib/AuthContext';
-import { AlertCircle, ArrowLeft, Mic, MicOff, PhoneOff, Video, VideoOff } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, ArrowLeft, Clock, Mic, MicOff, PhoneOff, Video, VideoOff } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
+import { api } from '@/api/apiClient';
 
 export default function Call() {
   const navigate = useNavigate();
@@ -12,7 +13,12 @@ export default function Call() {
   const { user } = useAuth();
 
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const roomId = params.get('roomId') || params.get('roomID') || params.get('roomid');
+  const rawId = params.get('roomId') || params.get('roomID') || params.get('roomid');
+  const roomId = rawId && rawId !== 'null' && rawId !== 'undefined' ? rawId : null;
+
+  const [room, setRoom] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const didEndRef = useRef(false);
 
   const [localVideoEl, setLocalVideoEl] = useState(null);
   const [remoteVideoEls, setRemoteVideoEls] = useState({}); // streamID -> video element
@@ -34,6 +40,47 @@ export default function Call() {
   } = useZegoCall({ roomId, user, autoJoin: true });
 
   useEffect(() => {
+    let active = true;
+    const load = async () => {
+      if (!roomId) return;
+      try {
+        const data = await api.entities.GDRoom.filter({ id: roomId });
+        if (!active) return;
+        if (Array.isArray(data) && data.length > 0) {
+          setRoom(data[0]);
+          if (data[0].duration) setTimeLeft(data[0].duration * 60);
+        }
+      } catch {}
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!roomId) return;
+    let timer;
+    const poll = async () => {
+      try {
+        const data = await api.entities.GDRoom.filter({ id: roomId });
+        if (data.length > 0 && data[0].status === 'completed' && !didEndRef.current) {
+          didEndRef.current = true;
+          try { await leaveRoom(); } catch {}
+          if (roomId) {
+            navigate(createPageUrl(`GDAnalysis?roomId=${roomId}`));
+          } else {
+            navigate(createPageUrl('Dashboard'));
+          }
+        }
+      } catch {}
+    };
+    poll();
+    timer = setInterval(poll, 3000);
+    return () => clearInterval(timer);
+  }, [roomId, navigate, leaveRoom]);
+
+  useEffect(() => {
     if (localVideoEl && localStream) {
       attachStreamToVideoElement(localVideoEl, localStream, { muted: true });
     }
@@ -48,11 +95,45 @@ export default function Call() {
     });
   }, [remoteStreams, remoteVideoEls, attachStreamToVideoElement]);
 
+  useEffect(() => {
+    if (!timeLeft) return;
+    const t = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          if (!didEndRef.current) {
+            didEndRef.current = true;
+            (async () => {
+              try { await leaveRoom(); } catch {}
+              if (roomId) {
+                navigate(createPageUrl(`GDAnalysis?roomId=${roomId}`));
+              } else {
+                navigate(createPageUrl('Dashboard'));
+              }
+            })();
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [timeLeft, navigate, leaveRoom, roomId]);
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const handleEndCall = async () => {
     try {
       await leaveRoom();
     } finally {
-      navigate(createPageUrl('Dashboard'));
+      if (roomId) {
+        navigate(createPageUrl(`GDAnalysis?roomId=${roomId}`));
+      } else {
+        navigate(createPageUrl('Dashboard'));
+      }
     }
   };
 
@@ -83,6 +164,12 @@ export default function Call() {
             <div className="font-bold">Room: {roomId}</div>
             <div className="text-xs text-gray-300">
               {isJoining ? 'Connecting…' : isJoined ? 'In call' : 'Idle'}
+            </div>
+          </div>
+          <div className={`${timeLeft < 60 ? 'bg-red-600' : 'bg-gray-700'} px-3 py-1 rounded-lg text-white text-sm`}>
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              <span>{formatTime(timeLeft)}</span>
             </div>
           </div>
         </div>

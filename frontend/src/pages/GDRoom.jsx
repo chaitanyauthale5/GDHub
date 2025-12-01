@@ -77,7 +77,11 @@ export default function GDRoom() {
         if (data.length === 0 || data[0].status === 'completed') {
           if (!isEndingRef.current) {
             setSessionActive(false);
-            navigate(createPageUrl(`GDAnalysis?roomId=${roomId}`));
+            if (roomId) {
+              navigate(createPageUrl('GDAnalysis', { roomId }));
+            } else {
+              navigate(createPageUrl('Dashboard'));
+            }
           }
         }
       } catch {}
@@ -127,14 +131,14 @@ export default function GDRoom() {
 
       if (!amHost) {
         try { stopLocalTracks(); } catch {}
-        navigate(createPageUrl(`GDAnalysis?roomId=${room.id}`));
+        navigate(createPageUrl('GDAnalysis', { roomId: room.id }));
         return;
       }
 
       // Host ends the room and navigates to analysis
       await api.entities.GDRoom.update(room.id, { status: 'completed' });
       try { stopLocalTracks(); } catch {}
-      navigate(createPageUrl(`GDAnalysis?roomId=${room.id}`));
+      navigate(createPageUrl('GDAnalysis', { roomId: room.id }));
     } catch (error) {
       console.error('Error ending session:', error);
       navigate(createPageUrl('Dashboard'));
