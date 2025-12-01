@@ -47,9 +47,9 @@ export default function Lobby() {
         const fetchedRoom = roomData[0];
         setRoom(fetchedRoom);
 
-        // If room status changed to active, navigate straight to call (skip prepare)
+        // If room status changed to active, send everyone to pre-GD prepare screen with countdown
         if (fetchedRoom.status === 'active') {
-          navigate(createPageUrl(`Call?roomId=${fetchedRoom.id}`));
+          navigate(createPageUrl(`GDPrepare?roomId=${fetchedRoom.id}`));
         } else if (fetchedRoom.status === 'completed') {
           // Host ended the room; redirect everyone out
           navigate(createPageUrl('Dashboard'));
@@ -121,8 +121,8 @@ export default function Lobby() {
       started_at: new Date().toISOString()
     });
 
-    // Navigate straight to call
-    navigate(createPageUrl(`Call?roomId=${room.id}`));
+    // After marking room active, go to pre-GD prepare screen (1-minute countdown)
+    navigate(createPageUrl(`GDPrepare?roomId=${room.id}`));
   };
 
   const exitRoom = async () => {
