@@ -63,6 +63,10 @@ export default function GDRoom() {
     roomId,
     user,
     autoJoin: true,
+    canPublish: (() => {
+      const spectate = (new URLSearchParams(window.location.search)).get('spectate');
+      return !(spectate === '1' || spectate === 'true');
+    })(),
   });
   const [showDebug, setShowDebug] = useState(false);
 
@@ -209,15 +213,13 @@ export default function GDRoom() {
 
       {/* WebRTC Video Grid */}
       <div className="flex-1 p-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 bg-gray-900">
-        {/* Local */}
-        <div className="relative rounded-xl overflow-hidden bg-gray-800 aspect-video">
-          {localStream ? (
+        {/* Local (hidden in spectator mode) */}
+        {localStream ? (
+          <div className="relative rounded-xl overflow-hidden bg-gray-800 aspect-video">
             <video data-self="true" ref={el => setVideoRef(el, localStream, true)} playsInline autoPlay className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-gray-400">{mediaError ? 'Mic/Camera blocked' : 'Connecting camera...'}</div>
-          )}
-          <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded">You</div>
-        </div>
+            <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded">You</div>
+          </div>
+        ) : null}
 
         {/* Remotes */}
         {Object.entries(remoteStreams || {}).map(([peerId, stream]) => (
@@ -263,14 +265,16 @@ export default function GDRoom() {
         )}
       </div>
 
-      {/* Controls */}
-      <div className="bg-gray-800 px-4 py-3 flex items-center gap-3 justify-center">
-        <button onClick={toggleMic} className={`px-3 py-2 rounded-lg text-sm font-bold ${micOn ? 'bg-green-600 text-white' : 'bg-gray-600 text-white'}`}>{micOn ? 'Mic On' : 'Mic Off'}</button>
-        <button onClick={toggleCamera} className={`px-3 py-2 rounded-lg text-sm font-bold ${cameraOn ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'}`}>{cameraOn ? 'Cam On' : 'Cam Off'}</button>
-        {mediaError && (
-          <button onClick={retryDevices} className="px-3 py-2 rounded-lg text-sm font-bold bg-yellow-600 text-white">Retry Devices</button>
-        )}
-      </div>
+      {/* Controls (hide in spectator mode) */}
+      {localStream && (
+        <div className="bg-gray-800 px-4 py-3 flex items-center gap-3 justify-center">
+          <button onClick={toggleMic} className={`px-3 py-2 rounded-lg text-sm font-bold ${micOn ? 'bg-green-600 text-white' : 'bg-gray-600 text-white'}`}>{micOn ? 'Mic On' : 'Mic Off'}</button>
+          <button onClick={toggleCamera} className={`px-3 py-2 rounded-lg text-sm font-bold ${cameraOn ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'}`}>{cameraOn ? 'Cam On' : 'Cam Off'}</button>
+          {mediaError && (
+            <button onClick={retryDevices} className="px-3 py-2 rounded-lg text-sm font-bold bg-yellow-600 text-white">Retry Devices</button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

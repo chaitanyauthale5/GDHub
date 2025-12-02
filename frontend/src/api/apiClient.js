@@ -44,10 +44,10 @@ async function request(method, path, body, headers = {}) {
   return await safeJson(resp);
 }
 
-const get = (p) => request('GET', p);
-const post = (p, b) => request('POST', p, b);
-const patchReq = (p, b) => request('PATCH', p, b);
-const del = (p) => request('DELETE', p);
+const get = (p, headers) => request('GET', p, undefined, headers);
+const post = (p, b, headers) => request('POST', p, b, headers);
+const patchReq = (p, b, headers) => request('PATCH', p, b, headers);
+const del = (p, headers) => request('DELETE', p, undefined, headers);
 
 // Map entity model name -> backend route
 const entityToPath = {
@@ -140,6 +140,32 @@ const tournaments = {
       group_number,
       accepted_rules,
     });
+  },
+  async createOrganiserLink({ tournamentId, organiser_email, organiser_name, expires_in_hours } = {}) {
+    if (!tournamentId) throw new Error('Missing tournamentId');
+    return post(`/api/tournaments/${tournamentId}/organiser-link`, { organiser_email, organiser_name, expires_in_hours });
+  },
+  async validateAccess({ tournamentId, accessToken }) {
+    if (!tournamentId) throw new Error('Missing tournamentId');
+    const params = new URLSearchParams();
+    if (accessToken) params.set('accessToken', accessToken);
+    return get(`/api/tournaments/${tournamentId}/validate-access${params.toString() ? `?${params.toString()}` : ''}`);
+  },
+  async validateOrganiserSession(tournamentId) {
+    if (!tournamentId) throw new Error('Missing tournamentId');
+    return get(`/api/tournaments/${tournamentId}/validate-organiser`);
+  },
+  async inviteJudge({ tournamentId, email, name, host_email, expires_in_hours, frontendUrl, accessToken } = {}) {
+    if (!tournamentId) throw new Error('Missing tournamentId');
+    const headers = {};
+    if (accessToken) headers['x-access-token'] = accessToken;
+    return post(`/api/tournaments/${tournamentId}/invite-judge`, { email, name, host_email, expires_in_hours, frontendUrl }, headers);
+  },
+  async sendTimeSlot({ tournamentId, registration_id, user_email, group_number, room_code, time_slot, host_email, accessToken } = {}) {
+    if (!tournamentId) throw new Error('Missing tournamentId');
+    const headers = {};
+    if (accessToken) headers['x-access-token'] = accessToken;
+    return post(`/api/tournaments/${tournamentId}/send-time-slot`, { registration_id, user_email, group_number, room_code, time_slot, host_email }, headers);
   },
 };
 
@@ -251,9 +277,56 @@ const integrations = {
 };
 
 const zego = {
-  async getRoomToken({ roomId, user_id, user_name }) {
-    return post('/api/zego/token', { roomId, user_id, user_name });
+  async getRoomToken({ roomId, user_id, user_name, canPublish = true }) {
+    return post('/api/zego/token', { roomId, user_id, user_name, canPublish });
   },
 };
 
-export const api = { auth, entities, appLogs, integrations, zego, tournaments };
+const rooms = {
+  gd: {
+    async start(id, { accessToken, host_email } = {}) {
+      const headers = {};
+      if (accessToken) headers['x-access-token'] = accessToken;
+      return post(`/api/gd-rooms/${id}/start`, { host_email }, headers);
+    },
+    async stop(id, { accessToken, host_email } = {}) {
+      const headers = {};
+      if (accessToken) headers['x-access-token'] = accessToken;
+      return post(`/api/gd-rooms/${id}/stop`, { host_email }, headers);
+    },
+    async restart(id, { accessToken, host_email } = {}) {
+      const headers = {};
+      if (accessToken) headers['x-access-token'] = accessToken;
+      return post(`/api/gd-rooms/${id}/restart`, { host_email }, headers);
+    },
+    async forceClose(id, { accessToken, host_email } = {}) {
+      const headers = {};
+      if (accessToken) headers['x-access-token'] = accessToken;
+      return post(`/api/gd-rooms/${id}/force-close`, { host_email }, headers);
+    },
+  },
+  debate: {
+    async start(id, { accessToken, host_email } = {}) {
+      const headers = {};
+      if (accessToken) headers['x-access-token'] = accessToken;
+      return post(`/api/debate-rooms/${id}/start`, { host_email }, headers);
+    },
+    async stop(id, { accessToken, host_email } = {}) {
+      const headers = {};
+      if (accessToken) headers['x-access-token'] = accessToken;
+      return post(`/api/debate-rooms/${id}/stop`, { host_email }, headers);
+    },
+    async restart(id, { accessToken, host_email } = {}) {
+      const headers = {};
+      if (accessToken) headers['x-access-token'] = accessToken;
+      return post(`/api/debate-rooms/${id}/restart`, { host_email }, headers);
+    },
+    async forceClose(id, { accessToken, host_email } = {}) {
+      const headers = {};
+      if (accessToken) headers['x-access-token'] = accessToken;
+      return post(`/api/debate-rooms/${id}/force-close`, { host_email }, headers);
+    },
+  },
+};
+
+export const api = { auth, entities, appLogs, integrations, zego, tournaments, rooms };

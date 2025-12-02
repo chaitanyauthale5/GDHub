@@ -98,6 +98,71 @@ async function sendTournamentRegistrationEmail({ to, userName, tournament, passw
     }
 }
 
+async function sendJudgeInviteEmail({ to, judgeName, tournament, inviteUrl }) {
+    if (!transporter) {
+        const msg = 'Email transporter not configured. Set SMTP_USER/SMTP_PASS and restart the server.';
+        console.error(msg);
+        throw new Error(msg);
+    }
+    if (!to || !tournament || !inviteUrl) {
+        throw new Error('Missing fields for judge invite email');
+    }
+    const subject = `Judge Invite – ${tournament.name}`;
+    const text = [
+        `Hello ${judgeName || ''},`,
+        `You are invited to judge the tournament "${tournament.name}".`,
+        `Organizer: ${tournament.organizer || 'N/A'}`,
+        `Open the link to access the judge panel in read-only mode:`,
+        `${inviteUrl}`,
+        `Support Email: ${supportEmail}`,
+    ].join('\n');
+    const html = `
+    <p>Hello ${judgeName || ''},</p>
+    <p>You are invited to judge the tournament <strong>${tournament.name}</strong>.</p>
+    <p>Organizer: ${tournament.organizer || 'N/A'}</p>
+    <p><a href="${inviteUrl}">Open Judge Panel</a> (read-only)</p>
+    <p>Support: ${supportEmail}</p>
+  `;
+    const info = await transporter.sendMail({ from: smtpUser, to, subject, text, html, replyTo: supportEmail || smtpUser });
+    return info;
+}
+
+async function sendTimeSlotEmail({ to, userName, tournament, groupNumber, roomCode, timeSlot }) {
+    if (!transporter) {
+        const msg = 'Email transporter not configured. Set SMTP_USER/SMTP_PASS and restart the server.';
+        console.error(msg);
+        throw new Error(msg);
+    }
+    if (!to || !tournament || !timeSlot) {
+        throw new Error('Missing fields for time slot email');
+    }
+    const subject = `Your time slot – ${tournament.name}`;
+    const text = [
+        `Hello ${userName || ''},`,
+        `Here are your details:`,
+        `Tournament: ${tournament.name}`,
+        `Group: ${groupNumber || 'TBA'}`,
+        `Lobby: ${roomCode || 'TBA'}`,
+        `Time: ${new Date(timeSlot).toLocaleString()}`,
+        `Support Email: ${supportEmail}`,
+    ].join('\n');
+    const html = `
+    <p>Hello ${userName || ''},</p>
+    <p>Here are your schedule details:</p>
+    <ul>
+      <li><strong>Tournament:</strong> ${tournament.name}</li>
+      <li><strong>Group:</strong> ${groupNumber || 'TBA'}</li>
+      <li><strong>Lobby:</strong> ${roomCode || 'TBA'}</li>
+      <li><strong>Time:</strong> ${new Date(timeSlot).toLocaleString()}</li>
+      <li><strong>Support:</strong> ${supportEmail}</li>
+    </ul>
+  `;
+    const info = await transporter.sendMail({ from: smtpUser, to, subject, text, html, replyTo: supportEmail || smtpUser });
+    return info;
+}
+
 module.exports = {
     sendTournamentRegistrationEmail,
+    sendJudgeInviteEmail,
+    sendTimeSlotEmail,
 };

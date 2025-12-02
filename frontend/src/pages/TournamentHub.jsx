@@ -245,7 +245,16 @@ export default function TournamentHub() {
                     </div>
                   </div>
                 </div>
-                {isRegistered(searchResult.id) ? (
+                {(user && searchResult.host_id === user.email) ? (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => navigate(createPageUrl(`Organiser?tournamentId=${searchResult.id}`))}
+                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-orange-400 to-pink-500 text-white font-bold"
+                  >
+                    Open Organiser Panel
+                  </motion.button>
+                ) : isRegistered(searchResult.id) ? (
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
@@ -324,6 +333,7 @@ export default function TournamentHub() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {tournaments.map((tournament, index) => {
               const registered = isRegistered(tournament.id);
+              const isHost = user && tournament.host_id === user.email;
               const registration = getRegistration(tournament.id);
               
               return (
@@ -369,7 +379,17 @@ export default function TournamentHub() {
                       ID: {tournament.tournament_id}
                     </div>
 
-                    {registered ? (
+                    {isHost ? (
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => navigate(createPageUrl(`Organiser?tournamentId=${tournament.id}`))}
+                        className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-400 to-pink-500 text-white font-bold flex items-center justify-center gap-2"
+                      >
+                        Open Organiser Panel
+                        <ArrowRight className="w-5 h-5" />
+                      </motion.button>
+                    ) : registered ? (
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}

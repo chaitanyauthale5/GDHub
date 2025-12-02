@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.post('/token', async (req, res) => {
     try {
-        const { roomId, user_id, user_name } = req.body || {};
+        const { roomId, user_id, user_name, canPublish } = req.body || {};
         if (!roomId || !user_id) {
             return res.status(400).json({ message: 'Missing roomId or user_id' });
         }
@@ -23,7 +23,7 @@ router.post('/token', async (req, res) => {
             userId: user_id,
             roomId,
             expiresInSeconds: config.zegoTokenExpirationSeconds || 60 * 60,
-            canPublish: true,
+            canPublish: typeof canPublish === 'boolean' ? !!canPublish : true,
         });
 
         const serverURL = (config.zegoServerUrl || '').trim();

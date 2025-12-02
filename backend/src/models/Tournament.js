@@ -16,6 +16,12 @@ const TournamentSchema = new mongoose.Schema({
     start_date: { type: Date },
     prize: { type: String },
     rules: { type: String },
-    password: { type: String }
+    password: { type: String },
+    judges: [{
+        email: { type: String, required: true },
+        name: { type: String },
+        status: { type: String, enum: ['invited', 'accepted'], default: 'invited' },
+        invited_at: { type: Date, default: Date.now }
+    }]
 }, { timestamps: true });
 module.exports = mongoose.model('Tournament', TournamentSchema);
