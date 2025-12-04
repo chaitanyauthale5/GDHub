@@ -80,22 +80,39 @@ function updateUtteranceMetrics(m, userId, userName, transcript, startMs, endMs,
  * Creates a Deepgram realtime session for a user. Exposes send(buffer) and close().
  * When Deepgram sends a final transcript result, we persist it and emit updated metrics via io.
  */
-function createDeepgramSession({ io, roomId, userId, userName, language, topic }) {
+/**
+ * Creates a Deepgram realtime session.
+ * If options.version === 'v2', uses Flux (Turn-based) API at /v2/listen with model=flux-general-en.
+ * Otherwise falls back to v1 /v1/listen with utterances.
+ */
+function createDeepgramSession({ io, roomId, userId, userName, language, topic, version = 'v1', encoding = 'webm', sampleRate = 48000 }) {
   const apiKey = config.deepgramApiKey;
   const lang = (language || config.deepgramLanguage || 'en-US');
   if (!apiKey) throw new Error('Deepgram API key missing');
 
-  const query = new URLSearchParams({
-    encoding: 'opus',
-    sample_rate: String(48000),
-    language: lang,
-    smart_format: 'true',
-    filler_words: 'true',
-    punctuate: 'true',
-    utterances: 'true',
-  });
-  const url = `wss://api.deepgram.com/v1/listen?${query.toString()}`;
+  // Build endpoint and query for v1 vs v2
+  let url = '';
+  if (String(version).toLowerCase() === 'v2' || String(version).toLowerCase() === 'flux') {
+    const q = new URLSearchParams({
+      model: 'flux-general-en',
+      encoding: String(encoding || 'ogg-opus'),
+      sample_rate: String(sampleRate || 48000),
+    });
+    url = `wss://api.deepgram.com/v2/listen?${q.toString()}`;
+  } else {
+    const q = new URLSearchParams({
+      encoding: 'opus',
+      sample_rate: String(sampleRate || 48000),
+      language: lang,
+      smart_format: 'true',
+      filler_words: 'true',
+      punctuate: 'true',
+      utterances: 'true',
+    });
+    url = `wss://api.deepgram.com/v1/listen?${q.toString()}`;
+  }
 
+  try { console.log('[dg] connect', url); } catch {}
   const dg = new WebSocket(url, { headers: { Authorization: `Token ${apiKey}` } });
   let open = false;
   const queue = [];
@@ -118,42 +135,116 @@ function createDeepgramSession({ io, roomId, userId, userName, language, topic }
     } catch {
       return;
     }
+
+    const now = Date.now();
+    const isFlux = String(version).toLowerCase() === 'v2' || String(version).toLowerCase() === 'flux';
+
+    if (isFlux) {
+      // v2 Flux messages
+      const type = msg?.type;
+      if (type === 'Connected') {
+        return; // nothing to do
+      }
+      if (type === 'TurnInfo') {
+        const event = msg?.event;
+        const transcript = String(msg?.transcript || '');
+        if (!transcript) return;
+        if (event === 'Update' || event === 'TurnResumed') {
+          // Interim
+          try {
+            io.to(`gd:${roomId}`).emit('gd_transcript', { roomId, userId, userName, text: transcript, final: false, ts: now });
+          } catch {}
+          return;
+        }
+        if (event === 'EndOfTurn' || event === 'EagerEndOfTurn') {
+          // Final chunk
+          // Use reported audio window for duration if available
+          const startSec = Number(msg?.audio_window_start) || 0;
+          const endSec = Number(msg?.audio_window_end) || 0;
+          const durMs = Math.max(250, Math.round(Math.max(0, endSec - startSec) * 1000) || 1000);
+          const endMs = now;
+          const startMs = endMs - durMs;
+
+          try {
+            await GDTranscript.create({
+              room_id: roomId,
+              user_id: userId,
+              user_name: userName,
+              text: transcript,
+              start_ms: startMs,
+              end_ms: endMs,
+              lang: (lang || 'en-US').slice(0, 10),
+              session_type: 'gd'
+            });
+          } catch {}
+
+          const m = updateTalkTime(roomId, userId, Math.max(0, endMs - startMs));
+          if (topic && !m.topic) m.topic = topic;
+          updateUtteranceMetrics(m, userId, userName, transcript, startMs, endMs, m.topic);
+          try {
+            const perUser = Array.from(m.perUser.entries()).map(([uid, v]) => ({
+              userId: uid,
+              userName: v.userName,
+              talkMs: v.talkMs || 0,
+              turns: v.turns || 0,
+              words: v.words || 0,
+              fillers: v.fillers || 0,
+              fillerRate: v.words ? Math.round((v.fillers / v.words) * 100) : 0,
+              interruptions: v.interruptions || 0,
+              wpmAvg: v.wpmCount ? Math.round(v.wpmSum / v.wpmCount) : 0,
+              sentimentAvg: v.turns ? Math.round((v.sentimentSum / v.turns) * 100) / 100 : 0,
+              onTopicAvg: v.turns ? Math.round((v.onTopicSum / v.turns) * 100) / 100 : 0,
+              collabCues: v.collabCues || 0,
+              leadershipCues: v.leadershipCues || 0,
+              lastText: v.lastText || ''
+            }));
+            const totalTalkMs = perUser.reduce((a, b) => a + (b.talkMs || 0), 0);
+            const payload = { roomId, perUser, lastSpeakerUserId: m.lastSpeakerUserId, totalTalkMs };
+            io.to(`gd:${roomId}`).emit('gd_metrics', payload);
+          } catch {}
+          try {
+            io.to(`gd:${roomId}`).emit('gd_transcript', { roomId, userId, userName, text: transcript, final: true, start_ms: startMs, end_ms: endMs, lang: (lang || 'en-US').slice(0, 10) });
+          } catch {}
+          return;
+        }
+        return;
+      }
+      if (msg?.type === 'Error' || msg?.type === 'FatalError') {
+        return;
+      }
+      return;
+    }
+
+    // v1 message format
     const alt = msg?.channel?.alternatives?.[0];
     const transcript = alt?.transcript || '';
     const isFinal = Boolean(msg?.is_final);
-    if (!isFinal || !transcript) return;
+    if (!transcript) return;
+
+    // Emit interim transcript updates as they arrive
+    if (!isFinal) {
+      try {
+        io.to(`gd:${roomId}`).emit('gd_transcript', { roomId, userId, userName, text: transcript, final: false, ts: now });
+      } catch {}
+      return;
+    }
 
     // Use wall clock times for cross-participant ordering.
     // Derive duration from word timings if present, but always anchor end to now.
-    const now = Date.now();
     let endMs = now;
     let startMs = now - 1000; // default 1s chunk duration
     const words = Array.isArray(alt?.words) ? alt.words : [];
     if (words.length > 0) {
       const first = words[0];
       const last = words[words.length - 1];
-      const durMs = (typeof first.start === 'number' && typeof last.end === 'number')
-        ? Math.max(250, Math.round((last.end - first.start) * 1000))
-        : 1000;
+      const durMs = (typeof first.start === 'number' && typeof last.end === 'number') ? Math.max(250, Math.round((last.end - first.start) * 1000)) : 1000;
       startMs = endMs - durMs;
     }
 
     try {
-      await GDTranscript.create({
-        room_id: roomId,
-        user_id: userId,
-        user_name: userName,
-        text: transcript,
-        start_ms: startMs,
-        end_ms: endMs,
-        lang: (lang || 'en-US').slice(0, 10),
-        session_type: 'gd'
-      });
-    } catch (e) {
-      // swallow persistence errors to not break streaming
-    }
+      await GDTranscript.create({ room_id: roomId, user_id: userId, user_name: userName, text: transcript, start_ms: startMs, end_ms: endMs, lang: (lang || 'en-US').slice(0, 10), session_type: 'gd' });
+    } catch {}
 
-    // Update minimal metrics and broadcast
     const m = updateTalkTime(roomId, userId, Math.max(0, endMs - startMs));
     if (topic && !m.topic) m.topic = topic;
     updateUtteranceMetrics(m, userId, userName, transcript, startMs, endMs, m.topic);
@@ -178,10 +269,17 @@ function createDeepgramSession({ io, roomId, userId, userName, language, topic }
       const payload = { roomId, perUser, lastSpeakerUserId: m.lastSpeakerUserId, totalTalkMs };
       io.to(`gd:${roomId}`).emit('gd_metrics', payload);
     } catch {}
+    try {
+      io.to(`gd:${roomId}`).emit('gd_transcript', { roomId, userId, userName, text: transcript, final: true, start_ms: startMs, end_ms: endMs, lang: (lang || 'en-US').slice(0, 10) });
+    } catch {}
   });
 
-  dg.on('error', () => {});
-  dg.on('close', () => {});
+  dg.on('error', (err) => {
+    try { console.warn('[dg] websocket error', err && err.message ? err.message : err); } catch {}
+  });
+  dg.on('close', (code, reason) => {
+    try { console.log('[dg] websocket close', code, reason ? reason.toString() : ''); } catch {}
+  });
 
   return {
     send(chunk) {

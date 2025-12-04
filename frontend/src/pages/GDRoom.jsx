@@ -8,6 +8,7 @@ import useSpeechToTranscript from '@/hooks/useSpeechToTranscript';
 import useZegoCall from '@/hooks/useZegoCall';
 import { ArrowLeft, Bot, Clock, MessageSquare, Users, X } from 'lucide-react';
 import useRealtimeGD from '@/hooks/useRealtimeGD';
+import TranscriptionModal from '@/components/shared/TranscriptionModal';
 
 export default function GDRoom() {
   const navigate = useNavigate();
@@ -76,6 +77,7 @@ export default function GDRoom() {
   });
 
   const [showDebug, setShowDebug] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(false);
 
   // Client-side speech recognition to transcript my speech
   useSpeechToTranscript({ enabled: false, roomId, user });
@@ -355,11 +357,18 @@ export default function GDRoom() {
         </div>
 
         <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowTranscript(true)}
+            className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold"
+          >
+            Live Transcription
+          </button>
           <select value={dgLang} onChange={(e) => setDgLang(e.target.value)} className="px-3 py-2 rounded-xl bg-gray-700 text-white text-sm">
             <option value="en-US">English (US)</option>
             <option value="en-IN">English (IN)</option>
             <option value="hi-IN">Hindi</option>
           </select>
+
           <div className={`px-4 py-2 rounded-xl flex items-center gap-2 ${
             timeLeft < 60 ? 'bg-red-500' : 'bg-gray-700'
           } text-white font-bold`}>
@@ -458,6 +467,7 @@ export default function GDRoom() {
           )}
         </div>
       )}
+      <TranscriptionModal open={showTranscript} onOpenChange={setShowTranscript} roomId={roomId} participants={room?.participants || []} />
     </div>
   );
 }

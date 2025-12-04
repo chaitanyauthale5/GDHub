@@ -584,16 +584,26 @@ const start = async () => {
         // ==== GD Realtime Audio → Deepgram ====
         socket.on('gd_audio_start', async (payload = {}) => {
             try {
-                const { roomId, userId, userName, language } = payload;
+                const { roomId, userId, userName, language, mimeType } = payload;
                 if (!roomId || !userId) return;
                 const key = `${roomId}:${userId}`;
                 if (dgSessions.has(key)) return;
                 let topic;
                 try { const r = await GDRoom.findById(roomId); topic = r?.topic; } catch {}
-                const session = createDeepgramSession({ io, roomId, userId, userName, language, topic });
+                // Always use Flux (v2). Map mimeType -> encoding
+                const mt = String(mimeType || '').toLowerCase();
+                let version = 'v2';
+                let encoding = 'opus';
+                let sampleRate = 48000;
+                if (mt.includes('ogg')) encoding = 'ogg-opus';
+                else if (mt.includes('webm')) encoding = 'opus';
+                else if (mt.includes('linear16') || mt.includes('pcm')) { encoding = 'linear16'; sampleRate = 16000; }
+                console.log(`[gd] audio_start room=${roomId} user=${userId} ver=${version} enc=${encoding} mime=${mimeType}`);
+                const session = createDeepgramSession({ io, roomId, userId, userName, language, topic, version, encoding, sampleRate });
                 dgSessions.set(key, session);
                 socket.join(`gd:${roomId}`);
             } catch (e) {
+                console.warn('[gd] audio_start error', e && e.message ? e.message : e);
             }
         });
 
@@ -610,6 +620,9 @@ const start = async () => {
                 else if (data?.buffer) buf = Buffer.from(data.buffer);
                 else buf = Buffer.from(data);
                 session.send(buf);
+                if (buf && buf.length) {
+                    if (Math.random() < 0.02) console.log(`[gd] chunk ${roomId}/${userId} bytes=${buf.length}`);
+                }
             } catch {}
         });
 
@@ -623,6 +636,7 @@ const start = async () => {
                     try { session.close(); } catch {}
                     dgSessions.delete(key);
                 }
+                console.log(`[gd] audio_stop room=${roomId} user=${userId}`);
             } catch {}
         });
 
