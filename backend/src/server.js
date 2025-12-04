@@ -27,6 +27,7 @@ const AIInterviewSession = require('./models/AIInterviewSession');
 
 const authRoutes = require('./routes/auth');
 const tokenRoutes = require('./routes/token');
+const globalGdRoutes = require('./routes/globalGd');
 
 const app = express();
 
@@ -49,6 +50,7 @@ app.use(rateLimit({ windowMs: 60 * 1000, max: 300 }));
 app.get('/health', (req, res) => res.json({ ok: true }));
 
 app.use('/api/auth', authRoutes);
+app.use('/api/global-gd', globalGdRoutes);
 
 app.use('/api/users', createCrudRouter(User));
 app.use('/api/user-profiles', createCrudRouter(UserProfile));

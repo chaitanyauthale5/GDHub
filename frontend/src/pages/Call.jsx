@@ -5,6 +5,7 @@ import { AlertCircle, ArrowLeft, Mic, MicOff, PhoneOff, Video, VideoOff } from '
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
+import { api } from '@/api/apiClient';
 
 export default function Call() {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ export default function Call() {
 
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const roomId = params.get('roomId') || params.get('roomID') || params.get('roomid');
+  const mode = location.state?.mode;
 
   const [localVideoEl, setLocalVideoEl] = useState(null);
   const [remoteVideoEls, setRemoteVideoEls] = useState({}); // streamID -> video element
@@ -50,6 +52,16 @@ export default function Call() {
 
   const handleEndCall = async () => {
     try {
+      // In global GD mode, also notify the global matching backend that this user left the room.
+      if (mode === 'global' && user && roomId) {
+        const userId = user.email || user.id;
+        try {
+          await api.globalGd.leaveRoom({ userId, roomId });
+        } catch (e) {
+          console.error('Failed to notify global GD leave-room', e);
+        }
+      }
+
       await leaveRoom();
     } finally {
       navigate(createPageUrl('Dashboard'));

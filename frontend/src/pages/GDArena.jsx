@@ -29,37 +29,8 @@ export default function GDArena() {
   const startGlobalMatch = async () => {
     if (!user) return;
 
-    // Use a more unique room code to ensure new room creation
-    const timestamp = Date.now().toString(36).substring(-4);
-    const random = Math.random().toString(36).substring(2, 6);
-    const roomCode = (timestamp + random).toUpperCase().substring(0, 6);
-
-    const topics = [
-      'The impact of artificial intelligence on employment',
-      'Social media regulation and free speech',
-      'Climate change and individual responsibility',
-      'Remote work vs office culture',
-      'Education system reforms needed today'
-    ];
-    const topic = topics[Math.floor(Math.random() * topics.length)];
-
-    const room = await api.entities.GDRoom.create({
-      room_code: roomCode,
-      host_id: user.email,
-      mode: 'global',
-      team_size: 4,
-      domain: 'general',
-      duration: 15,
-      status: 'lobby',
-      participants: [{
-        user_id: user.email,
-        name: user.full_name,
-        joined_at: new Date().toISOString()
-      }],
-      topic: topic
-    });
-
-    navigate(createPageUrl(`Lobby?roomId=${room.id}`));
+    // Use the new global auto-matching flow
+    navigate('/global');
   };
 
   const [showCustomOptions, setShowCustomOptions] = useState(false);

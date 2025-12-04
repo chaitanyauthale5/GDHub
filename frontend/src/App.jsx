@@ -11,6 +11,9 @@ import './App.css'
 import PageNotFound from './lib/PageNotFound'
 import { pagesConfig } from './pages.config'
 import AppFooter from './components/navigation/AppFooter'
+import Global from './pages/Global'
+import FindingParticipants from './pages/FindingParticipants'
+import GlobalLobby from './pages/GlobalLobby'
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -65,6 +68,30 @@ const AuthenticatedApp = () => {
           <MainPage />
         </LayoutWrapper>
       } />
+      <Route
+        path="/global"
+        element={
+          <LayoutWrapper currentPageName="Global">
+            <Global />
+          </LayoutWrapper>
+        }
+      />
+      <Route
+        path="/finding"
+        element={
+          <LayoutWrapper currentPageName="Global">
+            <FindingParticipants />
+          </LayoutWrapper>
+        }
+      />
+      <Route
+        path="/lobby/:roomId"
+        element={
+          <LayoutWrapper currentPageName="Global">
+            <GlobalLobby />
+          </LayoutWrapper>
+        }
+      />
       {Object.entries(Pages).map(([path, Page]) => (
         <Route
           key={path}
