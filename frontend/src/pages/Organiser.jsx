@@ -228,6 +228,28 @@ export default function Organiser() {
     }
   };
 
+  const doStartTournament = async () => {
+    if (!tournamentId) return;
+    setRefreshing(true);
+    try {
+      await api.tournaments.start({ tournamentId, accessToken });
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const doRestartTournament = async () => {
+    if (!tournamentId) return;
+    setRefreshing(true);
+    try {
+      await api.tournaments.restart({ tournamentId, accessToken });
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const confirmStartAnyway = async () => {
     if (!pendingStart) return;
     const id = pendingStart.roomId;
@@ -271,7 +293,28 @@ export default function Organiser() {
             <ArrowLeft className="w-5 h-5" />
             Back
           </button>
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-semibold">Status: {tournament?.status || 'unknown'}</span>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={doStartTournament}
+              disabled={refreshing || tournament?.status === 'active'}
+              className="px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <Play className="w-4 h-4" />
+              Start Tournament
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={doRestartTournament}
+              disabled={refreshing || tournament?.status !== 'active'}
+              className="px-4 py-2 rounded-lg bg-gradient-to-r from-yellow-500 to-amber-600 text-white font-bold flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <Repeat className="w-4 h-4" />
+              Restart
+            </motion.button>
             <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={manualRefresh} disabled={refreshing} className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold flex items-center gap-2">
               <RefreshCcw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
               {refreshing ? 'Refreshing...' : 'Refresh'}

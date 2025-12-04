@@ -213,6 +213,15 @@ app.post('/api/tournaments/:id/start', async (req, res) => {
     res.json(t);
 });
 
+app.post('/api/tournaments/:id/restart', async (req, res) => {
+    const t = await Tournament.findById(req.params.id);
+    if (!t) return res.status(404).json({ message: 'Not found' });
+    // Reset to registering so participants can (re)join and organiser can re-prepare rooms
+    t.status = 'registering';
+    await t.save();
+    res.json(t);
+});
+
 app.post('/api/tournament-registrations/:id/join', async (req, res) => {
     const reg = await TournamentRegistration.findById(req.params.id);
     if (!reg) return res.status(404).json({ message: 'Not found' });

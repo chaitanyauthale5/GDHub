@@ -170,6 +170,22 @@ const tournaments = {
     if (accessToken) headers['x-access-token'] = accessToken;
     return post(`/api/tournaments/${tournamentId}/send-time-slot`, { registration_id, user_email, group_number, room_code, time_slot, host_email }, headers);
   },
+  async start(args) {
+    const a = args || {};
+    const { tournamentId, accessToken } = a;
+    if (!tournamentId) throw new Error('Missing tournamentId');
+    const headers = {};
+    if (accessToken) headers['x-access-token'] = accessToken;
+    return post(`/api/tournaments/${tournamentId}/start`, {}, headers);
+  },
+  async restart(args) {
+    const a = args || {};
+    const { tournamentId, accessToken } = a;
+    if (!tournamentId) throw new Error('Missing tournamentId');
+    const headers = {};
+    if (accessToken) headers['x-access-token'] = accessToken;
+    return post(`/api/tournaments/${tournamentId}/restart`, {}, headers);
+  },
 };
 
 function ensureGuest() {
