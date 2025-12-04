@@ -130,22 +130,21 @@ const entities = {
 };
 
 const tournaments = {
-  async register(payload) {
-    const { tournamentId, user_id, user_name, user_email, group_number, accepted_rules } = payload || {};
+  async register(args) {
+    const a = args || {};
+    const { tournamentId, user_id, user_name, user_email, group_number, accepted_rules } = a;
     if (!tournamentId) throw new Error('Missing tournamentId');
-    return post(`/api/tournaments/${tournamentId}/register`, {
-      user_id,
-      user_name,
-      user_email,
-      group_number,
-      accepted_rules,
-    });
+    return post(`/api/tournaments/${tournamentId}/register`, { user_id, user_name, user_email, group_number, accepted_rules });
   },
-  async createOrganiserLink({ tournamentId, organiser_email, organiser_name, expires_in_hours } = {}) {
+  async createOrganiserLink(args) {
+    const a = args || {};
+    const { tournamentId, organiser_email, organiser_name, expires_in_hours } = a;
     if (!tournamentId) throw new Error('Missing tournamentId');
     return post(`/api/tournaments/${tournamentId}/organiser-link`, { organiser_email, organiser_name, expires_in_hours });
   },
-  async validateAccess({ tournamentId, accessToken }) {
+  async validateAccess(args) {
+    const a = args || {};
+    const { tournamentId, accessToken } = a;
     if (!tournamentId) throw new Error('Missing tournamentId');
     const params = new URLSearchParams();
     if (accessToken) params.set('accessToken', accessToken);
@@ -155,13 +154,17 @@ const tournaments = {
     if (!tournamentId) throw new Error('Missing tournamentId');
     return get(`/api/tournaments/${tournamentId}/validate-organiser`);
   },
-  async inviteJudge({ tournamentId, email, name, host_email, expires_in_hours, frontendUrl, accessToken } = {}) {
+  async inviteJudge(args) {
+    const a = args || {};
+    const { tournamentId, email, name, host_email, expires_in_hours, frontendUrl, accessToken } = a;
     if (!tournamentId) throw new Error('Missing tournamentId');
     const headers = {};
     if (accessToken) headers['x-access-token'] = accessToken;
     return post(`/api/tournaments/${tournamentId}/invite-judge`, { email, name, host_email, expires_in_hours, frontendUrl }, headers);
   },
-  async sendTimeSlot({ tournamentId, registration_id, user_email, group_number, room_code, time_slot, host_email, accessToken } = {}) {
+  async sendTimeSlot(args) {
+    const a = args || {};
+    const { tournamentId, registration_id, user_email, group_number, room_code, time_slot, host_email, accessToken } = a;
     if (!tournamentId) throw new Error('Missing tournamentId');
     const headers = {};
     if (accessToken) headers['x-access-token'] = accessToken;
@@ -299,52 +302,63 @@ const globalGd = {
   },
 };
 
-export const api = { auth, entities, appLogs, integrations, zego, globalGd };
+let api = { auth, entities, appLogs, integrations, zego, globalGd };
 const rooms = {
   gd: {
-    async start(id, { accessToken, host_email } = {}) {
+    async start(id, args) {
+      const a = args || {};
       const headers = {};
-      if (accessToken) headers['x-access-token'] = accessToken;
-      return post(`/api/gd-rooms/${id}/start`, { host_email }, headers);
+      if (a.accessToken) headers['x-access-token'] = a.accessToken;
+      return post(`/api/gd-rooms/${id}/start`, { host_email: a.host_email }, headers);
     },
-    async stop(id, { accessToken, host_email } = {}) {
+    async stop(id, args) {
+      const a = args || {};
       const headers = {};
-      if (accessToken) headers['x-access-token'] = accessToken;
-      return post(`/api/gd-rooms/${id}/stop`, { host_email }, headers);
+      if (a.accessToken) headers['x-access-token'] = a.accessToken;
+      return post(`/api/gd-rooms/${id}/stop`, { host_email: a.host_email }, headers);
     },
-    async restart(id, { accessToken, host_email } = {}) {
+    async restart(id, args) {
+      const a = args || {};
       const headers = {};
-      if (accessToken) headers['x-access-token'] = accessToken;
-      return post(`/api/gd-rooms/${id}/restart`, { host_email }, headers);
+      if (a.accessToken) headers['x-access-token'] = a.accessToken;
+      return post(`/api/gd-rooms/${id}/restart`, { host_email: a.host_email }, headers);
     },
-    async forceClose(id, { accessToken, host_email } = {}) {
+    async forceClose(id, args) {
+      const a = args || {};
       const headers = {};
-      if (accessToken) headers['x-access-token'] = accessToken;
-      return post(`/api/gd-rooms/${id}/force-close`, { host_email }, headers);
+      if (a.accessToken) headers['x-access-token'] = a.accessToken;
+      return post(`/api/gd-rooms/${id}/force-close`, { host_email: a.host_email }, headers);
     },
   },
   debate: {
-    async start(id, { accessToken, host_email } = {}) {
+    async start(id, args) {
+      const a = args || {};
       const headers = {};
-      if (accessToken) headers['x-access-token'] = accessToken;
-      return post(`/api/debate-rooms/${id}/start`, { host_email }, headers);
+      if (a.accessToken) headers['x-access-token'] = a.accessToken;
+      return post(`/api/debate-rooms/${id}/start`, { host_email: a.host_email }, headers);
     },
-    async stop(id, { accessToken, host_email } = {}) {
+    async stop(id, args) {
+      const a = args || {};
       const headers = {};
-      if (accessToken) headers['x-access-token'] = accessToken;
-      return post(`/api/debate-rooms/${id}/stop`, { host_email }, headers);
+      if (a.accessToken) headers['x-access-token'] = a.accessToken;
+      return post(`/api/debate-rooms/${id}/stop`, { host_email: a.host_email }, headers);
     },
-    async restart(id, { accessToken, host_email } = {}) {
+    async restart(id, args) {
+      const a = args || {};
       const headers = {};
-      if (accessToken) headers['x-access-token'] = accessToken;
-      return post(`/api/debate-rooms/${id}/restart`, { host_email }, headers);
+      if (a.accessToken) headers['x-access-token'] = a.accessToken;
+      return post(`/api/debate-rooms/${id}/restart`, { host_email: a.host_email }, headers);
     },
-    async forceClose(id, { accessToken, host_email } = {}) {
+    async forceClose(id, args) {
+      const a = args || {};
       const headers = {};
-      if (accessToken) headers['x-access-token'] = accessToken;
-      return post(`/api/debate-rooms/${id}/force-close`, { host_email }, headers);
+      if (a.accessToken) headers['x-access-token'] = a.accessToken;
+      return post(`/api/debate-rooms/${id}/force-close`, { host_email: a.host_email }, headers);
     },
   },
 };
 
-export const api = { auth, entities, appLogs, integrations, zego, tournaments, rooms };
+// Final export including tournaments/rooms
+api = { ...api, tournaments, rooms };
+export { api };
+
