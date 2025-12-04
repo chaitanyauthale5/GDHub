@@ -14,6 +14,21 @@ export default function GDAnalysis() {
   const [perUser, setPerUser] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(/** @type {string} */ ('feedback'));
+  const [analysisMode, setAnalysisMode] = useState(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const raw = (sp.get('analysis') || localStorage.getItem('gd_analysis_mode') || 'dummy').toLowerCase();
+    return raw === 'original' ? 'original' : 'dummy';
+  });
+
+  // persist mode and update URL param for shareability
+  useEffect(() => {
+    try { localStorage.setItem('gd_analysis_mode', analysisMode); } catch {}
+    const sp = new URLSearchParams(window.location.search);
+    sp.set('analysis', analysisMode);
+    const qs = sp.toString();
+    const next = `${window.location.pathname}?${qs}`;
+    window.history.replaceState({}, '', next);
+  }, [analysisMode]);
 
   const urlParams = new URLSearchParams(window.location.search);
   const rawSessionId = urlParams.get('sessionId') || urlParams.get('sessionID') || urlParams.get('sessionid');
@@ -23,7 +38,7 @@ export default function GDAnalysis() {
 
   useEffect(() => {
     loadSessionAndAnalyze();
-  }, []);
+  }, [analysisMode]);
 
   const loadSessionAndAnalyze = async () => {
     try {
@@ -93,42 +108,145 @@ export default function GDAnalysis() {
     return map;
   };
 
+  const tokenize = (s) => (String(s || '').toLowerCase().match(/[a-z']+/g) || []);
+  const fillerList = new Set(['um','uh','erm','hmm','like','actually','basically','literally']);
+  const collabRegs = [/\bi agree\b/g, /building on/g, /adding to/g, /as [a-z]+ said/g, /good point/g, /what do you think/g, /let's/g, /we should/g, /we could/g, /together/g, /as a group/g, /can someone/g, /want to hear/g];
+  const leaderRegs = [/we should/g, /we need/g, /to summarize/g, /summary/g, /next steps/g, /time check/g, /back to the topic/g, /let's/g, /agenda/g];
+  const posWords = new Set(['great','good','thanks','interesting','love','nice','clear','well','agree','appreciate','helpful']);
+  const negWords = new Set(['bad','terrible','hate','awful','confusing','unclear','disagree']);
+  const onTopicScoreLocal = (text, topic) => {
+    const s = String(text || '').toLowerCase();
+    const t = String(topic || '').toLowerCase();
+    if (!t.trim()) return 0.5;
+    const stop = new Set(['is','the','a','an','of','and','or','to','in','on','for','with','without','are','do','does','did','be','being','been','at','by','from','it','that']);
+    const toks = Array.from(new Set((t.match(/[a-z']+/g) || []).filter(x => !stop.has(x))));
+    if (toks.length === 0) return 0.5;
+    let hit = 0; for (const tok of toks) if (s.includes(tok)) hit++;
+    return Math.max(0, Math.min(1, hit / toks.length));
+  };
+  const wpmScore = (wpm) => {
+    const lo = 90, hi = 170;
+    if (!Number.isFinite(wpm) || wpm <= 0) return 0;
+    if (wpm >= lo && wpm <= hi) return 1;
+    const d = wpm < lo ? lo - wpm : wpm - hi;
+    return Math.max(0, 1 - d / 80);
+  };
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+  const computeGroupMetrics = (transcripts = [], participants = [], topic = '') => {
+    const sorted = [...transcripts].sort((a,b) => (a.start_ms||0) - (b.start_ms||0));
+    const byUser = new Map();
+    let lastEnd = 0, lastSpeaker = null;
+    for (const t of sorted) {
+      const uid = t.user_id || t.user_name || 'unknown';
+      const name = (participants.find(p => p.user_id === uid)?.name) || t.user_name || uid;
+      const start = Number(t.start_ms || 0); const end = Number(t.end_ms || start + 1000);
+      const durMs = Math.max(1, end - start);
+      const tokens = tokenize(t.text);
+      const words = tokens.length;
+      let fillers = 0; for (const tok of tokens) if (fillerList.has(tok)) fillers++;
+      let collab = 0; for (const r of collabRegs) { const m = String(t.text||'').toLowerCase().match(r); if (m) collab += m.length; }
+      let lead = 0; for (const r of leaderRegs) { const m = String(t.text||'').toLowerCase().match(r); if (m) lead += m.length; }
+      let pos=0, neg=0; for (const tok of tokens) { if (posWords.has(tok)) pos++; else if (negWords.has(tok)) neg++; }
+      const sentiment = clamp01((pos - neg) / Math.max(1, words) + 0.5);
+      const u0 = byUser.get(uid) || { userId: uid, name, talkMs: 0, turns: 0, words: 0, fillers: 0, interruptions: 0, sentimentSum: 0, onTopicSum: 0, collabCues: 0, leadershipCues: 0, wpmSum: 0, wpmCount: 0 };
+      const wpm = Math.max(0, Math.round(words / (durMs / 60000)) || 0);
+      u0.talkMs += durMs;
+      u0.turns += 1;
+      u0.words += words;
+      u0.fillers += fillers;
+      u0.sentimentSum += sentiment;
+      u0.onTopicSum += onTopicScoreLocal(t.text, topic);
+      u0.collabCues += collab;
+      u0.leadershipCues += lead;
+      if (wpm > 0) { u0.wpmSum += wpm; u0.wpmCount += 1; }
+      if (lastSpeaker && lastSpeaker !== uid && lastEnd > (start - 200)) { u0.interruptions += 1; }
+      byUser.set(uid, u0);
+      lastSpeaker = uid; lastEnd = end;
+    }
+    const perUser = Array.from(byUser.values()).map(u => ({
+      ...u,
+      wpmAvg: u.wpmCount ? Math.round(u.wpmSum / u.wpmCount) : 0,
+      fillerRate: u.words ? u.fillers / u.words : 0,
+      sentimentAvg: u.turns ? u.sentimentSum / u.turns : 0,
+      onTopicAvg: u.turns ? u.onTopicSum / u.turns : 0,
+    }));
+    const totalTalkMs = perUser.reduce((s, x) => s + (x.talkMs || 0), 0);
+    const maxTurns = perUser.reduce((m, x) => Math.max(m, x.turns || 0), 0) || 1;
+    const maxInter = perUser.reduce((m, x) => Math.max(m, x.interruptions || 0), 0) || 1;
+    const maxCollab = perUser.reduce((m, x) => Math.max(m, x.collabCues || 0), 0) || 1;
+    const maxLead = perUser.reduce((m, x) => Math.max(m, x.leadershipCues || 0), 0) || 1;
+    const n = Math.max(1, participants.length || perUser.length || 1);
+    const targetShare = 1 / n;
+    const withScores = perUser.map(u => {
+      const share = totalTalkMs ? u.talkMs / totalTalkMs : 0;
+      const shareScore = clamp01(1 - Math.abs(share - targetShare) / Math.max(1e-3, 1 - targetShare));
+      const turnsNorm = clamp01((u.turns || 0) / maxTurns);
+      const interNorm = clamp01((u.interruptions || 0) / maxInter);
+      const fillerNorm = clamp01((u.fillerRate || 0) / 0.06);
+      const wpmNorm = wpmScore(u.wpmAvg || 0);
+      const collabNorm = clamp01((u.collabCues || 0) / maxCollab);
+      const leadNorm = clamp01((u.leadershipCues || 0) / maxLead);
+      const participation = 100 * (0.4 * shareScore + 0.3 * turnsNorm + 0.3 * (1 - interNorm));
+      const communication = 100 * (0.4 * wpmNorm + 0.6 * (1 - fillerNorm));
+      const knowledge = 100 * (0.6 * (u.onTopicAvg || 0) + 0.4 * wpmNorm);
+      const teamwork = 100 * (0.4 * leadNorm + 0.3 * collabNorm + 0.3 * (u.sentimentAvg || 0));
+      const overall = Math.round((participation + communication + knowledge + teamwork) / 4);
+      return { ...u, share, participation: Math.round(participation), communication: Math.round(communication), knowledge: Math.round(knowledge), teamwork: Math.round(teamwork), overallScore: overall };
+    });
+    const avg = (arr) => Math.round(arr.reduce((s, x) => s + x, 0) / Math.max(1, arr.length));
+    const overallScore = avg(withScores.map(u => u.overallScore));
+    const participationScore = avg(withScores.map(u => u.participation));
+    const communicationScore = avg(withScores.map(u => u.communication));
+    const knowledgeScore = avg(withScores.map(u => u.knowledge));
+    const teamworkScore = avg(withScores.map(u => u.teamwork));
+    return { perUser: withScores, totalTalkMs, overallScore, participationScore, communicationScore, knowledgeScore, teamworkScore };
+  };
+
   const generateAnalysis = async (sessionData) => {
     try {
+      // If user selected Dummy mode, short-circuit with demo-like values
+      if (analysisMode === 'dummy') {
+        setAnalysis({
+          overallScore: 72,
+          participationScore: 70,
+          communicationScore: 74,
+          knowledgeScore: 69,
+          teamworkScore: 75,
+          strengths: ['Clear articulation of ideas', 'Good listening and turn-taking', 'Constructive tone'],
+          improvements: ['Provide more concrete examples', 'Summarize key points more often', 'Invite quieter members'],
+          detailedFeedback: 'The group discussion demonstrated solid collaboration and idea flow. You contributed regularly and helped keep the discussion on track. Focus on adding evidence and drawing others in to elevate the conversation further.',
+          tips: ['Use “because” statements to bring evidence', 'Summarize the last 2–3 points every few minutes', 'Ask open questions to engage quieter peers'],
+        });
+        return;
+      }
+
       if (sessionData?.room_id) {
         const transcripts = await api.entities.GDTranscript.filter({ room_id: sessionData.room_id });
-        const combined = (transcripts || [])
-          .sort((a, b) => (a.start_ms || 0) - (b.start_ms || 0))
-          .map(t => `${t.user_name || t.user_id || 'Participant'}: ${t.text}`)
-          .join('\n');
-
-        if (combined) {
-          const gemini = await analyzeTranscript({
-            transcript: combined,
-            topic: sessionData.topic || 'Group Discussion',
-          });
-
-          if (gemini && typeof gemini === 'object') {
-            const overall = Number.isFinite(Number(gemini.overallScore)) ? Math.round(Number(gemini.overallScore)) : 0;
-            const participationScore = Number.isFinite(Number(gemini.confidenceScore)) ? Math.round(Number(gemini.confidenceScore)) : overall;
-            const communicationScore = Number.isFinite(Number(gemini.clarityScore)) ? Math.round(Number(gemini.clarityScore)) : overall;
-            const knowledgeScore = Number.isFinite(Number(gemini.vocabularyScore)) ? Math.round(Number(gemini.vocabularyScore)) : overall;
-            const teamworkScore = Number.isFinite(Number(gemini.fluencyScore)) ? Math.round(Number(gemini.fluencyScore)) : overall;
-
-            setAnalysis({
-              overallScore: overall,
-              participationScore,
-              communicationScore,
-              knowledgeScore,
-              teamworkScore,
-              strengths: Array.isArray(gemini.strengths) ? gemini.strengths : [],
-              improvements: Array.isArray(gemini.improvements) ? gemini.improvements : [],
-              detailedFeedback: gemini.detailedFeedback || gemini.summary || '',
-              tips: Array.isArray(gemini.practiceExercises) ? gemini.practiceExercises : (Array.isArray(gemini.suggestions) ? gemini.suggestions : []),
-            });
-            return;
+        const group = computeGroupMetrics(transcripts, sessionData.participants || [], sessionData.topic || '');
+        let strengths = [];
+        let improvements = [];
+        try {
+          const combined = (transcripts || []).sort((a,b)=> (a.start_ms||0)-(b.start_ms||0)).map(t=> `${t.user_name || t.user_id || 'Participant'}: ${t.text}`).join('\n');
+          if (combined) {
+            const gemini = await analyzeTranscript({ transcript: combined, topic: sessionData.topic || 'Group Discussion' });
+            if (gemini && typeof gemini === 'object') {
+              strengths = Array.isArray(gemini.strengths) ? gemini.strengths : strengths;
+              improvements = Array.isArray(gemini.improvements) ? gemini.improvements : improvements;
+            }
           }
-        }
+        } catch {}
+        setAnalysis({
+          overallScore: group.overallScore,
+          participationScore: group.participationScore,
+          communicationScore: group.communicationScore,
+          knowledgeScore: group.knowledgeScore,
+          teamworkScore: group.teamworkScore,
+          strengths: strengths.length ? strengths : ['Balanced participation from most members', 'Good collaboration cues observed', 'Positive tone maintained'],
+          improvements: improvements.length ? improvements : ['Reduce filler words', 'Stay on-topic consistently', 'Aim for balanced speaking time'],
+          detailedFeedback: 'Scores are computed from real-time metrics like talk-time, turns, WPM, filler usage, on-topic focus, collaboration and leadership cues.',
+          tips: ['Aim for steady 110–160 WPM', 'Use fewer filler words', 'Invite quieter members and summarize transitions'],
+        });
+        return;
       } else if (sessionData?.transcript) {
         const gemini = await analyzeTranscript({
           transcript: sessionData.transcript,
@@ -217,70 +335,66 @@ Generate a comprehensive analysis in JSON format with:
       participants.forEach(p => { index[p.user_id] = p; });
 
       const results = [];
-      for (const p of participants) {
-        const items = grouped.get(p.user_id) || [];
-        const totalMs = items.reduce((sum, t) => sum + Math.max(0, (t.end_ms || 0) - (t.start_ms || 0)), 0);
-        const text = items.map(t => t.text).join(' ').slice(0, 4000);
-        const name = p.name || items[0]?.user_name || 'Participant';
-        let ai = null;
-
-        if (text) {
-          try {
-            const gemini = await analyzeTranscript({
-              transcript: text,
-              topic: sessionData.topic || 'Group Discussion',
-            });
-            if (gemini && typeof gemini === 'object') {
-              const overallScore = Number.isFinite(Number(gemini.overallScore)) ? Math.round(Number(gemini.overallScore)) : 0;
-              const communicationScore = Number.isFinite(Number(gemini.clarityScore)) ? Math.round(Number(gemini.clarityScore)) : overallScore;
-              const knowledgeScore = Number.isFinite(Number(gemini.vocabularyScore)) ? Math.round(Number(gemini.vocabularyScore)) : overallScore;
-              ai = {
-                overallScore,
-                communicationScore,
-                knowledgeScore,
-                participationSummary: gemini.summary || gemini.detailedFeedback || '',
-                strengths: Array.isArray(gemini.strengths) ? gemini.strengths : [],
-                improvements: Array.isArray(gemini.improvements) ? gemini.improvements : [],
-              };
-            }
-          } catch (e) {
-            ai = null;
+      if (analysisMode === 'original') {
+        const group = computeGroupMetrics(transcripts, participants, sessionData.topic || '');
+        for (const p of participants) {
+          const name = p.name || 'Participant';
+          let u = group.perUser.find(x => String(x.userId) === String(p.user_id)) || null;
+          if (!u && name) {
+            u = group.perUser.find(x => String(x.name || '').toLowerCase() === String(name).toLowerCase()) || null;
           }
-        }
 
-        if (!ai) {
-          try {
-            ai = await api.integrations.Core.InvokeLLM({
-              prompt: `Analyze the following participant's contributions in a group discussion. Provide scores and feedback.\n\nParticipant: ${name}\nTopic: ${sessionData.topic}\nTranscript (may be partial):\n${text}\n\nReturn JSON with keys: overallScore (0-100), communicationScore (0-100), knowledgeScore (0-100), participationSummary (1-2 sentences), strengths (3 items), improvements (3 items).`,
-              response_json_schema: {
-                type: 'object',
-                properties: {
-                  overallScore: { type: 'number' },
-                  communicationScore: { type: 'number' },
-                  knowledgeScore: { type: 'number' },
-                  participationSummary: { type: 'string' },
-                  strengths: { type: 'array', items: { type: 'string' } },
-                  improvements: { type: 'array', items: { type: 'string' } },
-                },
-              },
-            });
-          } catch (e) {
-            ai = null;
+          const items = grouped.get(p.user_id) || [];
+          const totalMs = items.reduce((sum, t) => sum + Math.max(0, (t.end_ms || 0) - (t.start_ms || 0)), 0);
+          const talkMs = u?.talkMs ?? totalMs;
+          const talkTimeSec = Math.max(0, Math.round((talkMs || 0) / 1000));
+          const ai = u ? {
+            overallScore: u.overallScore,
+            communicationScore: u.communication,
+            knowledgeScore: u.knowledge,
+            participationSummary: `Spoke for ${talkTimeSec}s with ${u.turns} turns, avg ${u.wpmAvg} WPM. On-topic ${(Math.round((u.onTopicAvg || 0)*100))}%, fillers ${(Math.round((u.fillerRate || 0)*100))}/100w.`,
+            strengths: [u.leadershipCues>0?'Showed leadership':'Positive tone', u.collabCues>0?'Built on peers':'Clear points', (u.onTopicAvg||0)>0.6?'Stayed on-topic':'Good participation'],
+            improvements: [(u.fillerRate||0)>0.05?'Reduce fillers':'Add examples', (u.wpmAvg||0)>170?'Slow down':'Summarize more', u.interruptions>0?'Fewer interruptions':'Invite others'],
+          } : {
+            overallScore: 0,
+            communicationScore: 0,
+            knowledgeScore: 0,
+            participationSummary: 'No transcript captured',
+            strengths: [],
+            improvements: [],
+          };
+          results.push({ userId: p.user_id, name, talkTimeSec, ai });
+        }
+      } else {
+        for (const p of participants) {
+          const items = grouped.get(p.user_id) || [];
+
+          const totalMs = items.reduce((sum, t) => sum + Math.max(0, (t.end_ms || 0) - (t.start_ms || 0)), 0);
+          const text = items.map(t => t.text).join(' ').slice(0, 4000);
+          const name = p.name || items[0]?.user_name || 'Participant';
+          let ai = null;
+          if (text) {
+            try {
+              const gemini = await analyzeTranscript({ transcript: text, topic: sessionData.topic || 'Group Discussion' });
+              if (gemini && typeof gemini === 'object') {
+                const overallScore = Number.isFinite(Number(gemini.overallScore)) ? Math.round(Number(gemini.overallScore)) : 0;
+                const communicationScore = Number.isFinite(Number(gemini.clarityScore)) ? Math.round(Number(gemini.clarityScore)) : overallScore;
+                const knowledgeScore = Number.isFinite(Number(gemini.vocabularyScore)) ? Math.round(Number(gemini.vocabularyScore)) : overallScore;
+                ai = { overallScore, communicationScore, knowledgeScore, participationSummary: gemini.summary || gemini.detailedFeedback || '', strengths: Array.isArray(gemini.strengths) ? gemini.strengths : [], improvements: Array.isArray(gemini.improvements) ? gemini.improvements : [] };
+              }
+            } catch {}
           }
+          const fallbackAi = {
+            overallScore: 70,
+            communicationScore: 72,
+            knowledgeScore: 68,
+            participationSummary: 'Contributed regularly and responded to peers constructively.',
+            strengths: ['Clear points', 'Positive tone', 'Builds on others’ ideas'],
+            improvements: ['Add examples', 'Be concise', 'Invite others to speak'],
+          };
+          const talkTimeSec = Math.max(5, Math.round(totalMs / 1000) || Math.floor(20 + Math.random() * 60));
+          results.push({ userId: p.user_id, name, talkTimeSec, ai: analysisMode === 'dummy' ? fallbackAi : (ai || fallbackAi) });
         }
-
-        // Dummy fallback to ensure visible ranking and feedback even without transcripts/LLM
-        const fallbackAi = {
-          overallScore: 70,
-          communicationScore: 72,
-          knowledgeScore: 68,
-          participationSummary: 'Contributed regularly and responded to peers constructively.',
-          strengths: ['Clear points', 'Positive tone', 'Builds on others’ ideas'],
-          improvements: ['Add examples', 'Be concise', 'Invite others to speak'],
-        };
-        const talkTimeSec = Math.max(5, Math.round(totalMs / 1000) || Math.floor(20 + Math.random() * 60));
-
-        results.push({ userId: p.user_id, name, talkTimeSec, ai: ai || fallbackAi });
       }
       setPerUser(results);
     } catch (error) {
@@ -337,6 +451,17 @@ Generate a comprehensive analysis in JSON format with:
           </div>
           <h1 className="text-3xl sm:text-4xl font-black mb-2">GD Performance Analysis</h1>
           <p className="text-gray-600">Here's how you performed in the discussion</p>
+        </motion.div>
+
+        {/* Analysis Mode Toggle */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
+          <div className="bg-white rounded-2xl shadow-xl border-2 border-gray-100 p-3 flex items-center justify-between">
+            <div className="text-sm font-bold text-gray-700">Analysis Mode</div>
+            <div className="flex gap-2">
+              <button onClick={() => setAnalysisMode('dummy')} className={`px-3 py-1.5 rounded-xl text-sm font-bold ${analysisMode === 'dummy' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>Dummy</button>
+              <button onClick={() => setAnalysisMode('original')} className={`px-3 py-1.5 rounded-xl text-sm font-bold ${analysisMode === 'original' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Original</button>
+            </div>
+          </div>
         </motion.div>
 
         {/* Session Info */}
