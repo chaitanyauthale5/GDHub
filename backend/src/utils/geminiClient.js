@@ -46,29 +46,43 @@ function clampScore(value, min, max) {
     return v;
 }
 
+function isTooShort(durationSec, transcript) {
+    const raw = String(transcript || '').trim();
+    const words = raw.toLowerCase().match(/\b[a-z']+\b/g) || [];
+    const dur = Number(durationSec) || 0;
+    return raw.length < 10 || words.length < 5 || dur < 5;
+}
+
+function buildZeroAnalysis({ topic }) {
+    return {
+        overallScore: 0,
+        fluencyScore: 0,
+        structureScore: 0,
+        contentScore: 0,
+        deliveryScore: 0,
+        openingTips: 'Start your speech with a clear one-line introduction of the topic.',
+        closingTips: 'End with a short summary and a confident closing line.',
+        strengths: [],
+        improvements: [
+            'Record a short response so we can analyze it.',
+            'Aim for at least 10–15 seconds and ~20+ words.'
+        ],
+        detailedFeedback: 'Input was too short to evaluate. Please speak longer to get a proper score.',
+        practiceTopics: ['Public speaking basics', 'Structuring short talks', 'Reducing filler words']
+    };
+}
+
 function buildHeuristicExtemporeAnalysis({ topic, durationSec, transcript }) {
     const raw = String(transcript || '').trim();
     if (!raw) {
-        return {
-            overallScore: 0,
-            fluencyScore: 0,
-            structureScore: 0,
-            contentScore: 0,
-            deliveryScore: 0,
-            openingTips: 'Start your speech with a clear one-line introduction of the topic.',
-            closingTips: 'End with a short summary and a confident closing line.',
-            strengths: [],
-            improvements: [
-                'Record a short response on the topic so we can analyze it.',
-                'Aim for at least 45–60 seconds of speaking time.'
-            ],
-            detailedFeedback: 'Once you record an extempore response, you will see a detailed breakdown here.',
-            practiceTopics: ['Public speaking basics', 'Structuring short talks', 'Reducing filler words']
-        };
+        return buildZeroAnalysis({ topic });
     }
 
     const lower = raw.toLowerCase();
     const words = lower.match(/\b[a-z']+\b/gi) || [];
+    if (words.length < 5 || (Number(durationSec) || 0) < 5) {
+        return buildZeroAnalysis({ topic });
+    }
     const sentences = raw.split(/[.!?]+/).map(s => s.trim()).filter(Boolean);
     const fillerList = ['um', 'uh', 'like', 'you know', 'actually', 'basically', 'literally', 'so', 'well', 'right', 'okay', 'ok'];
 
@@ -132,12 +146,56 @@ function buildHeuristicExtemporeAnalysis({ topic, durationSec, transcript }) {
     };
 }
 
+function applyHybridScoring(base, durationSec, transcript) {
+    const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    const clamp = (v) => (v < 0 ? 0 : v > 100 ? 100 : Math.round(v));
+    const raw = String(transcript || '');
+    const words = (raw.toLowerCase().match(/\b[a-z']+\b/g) || []).length;
+    if (isTooShort(durationSec, transcript)) {
+        return {
+            overallScore: 0,
+            fluencyScore: 0,
+            structureScore: 0,
+            contentScore: 0,
+            deliveryScore: 0,
+        };
+    }
+    const idealDur = 60;
+    const idealWords = 120;
+    const durFactor = Math.max(0, Math.min(1, 1 - Math.abs((Number(durationSec) || 0) - idealDur) / idealDur));
+    const lenFactor = Math.max(0, Math.min(1, 1 - Math.abs(words - idealWords) / idealWords));
+    const durDelta = (durFactor - 0.5) * 20;
+    const lenDelta = (lenFactor - 0.5) * 20;
+
+    const flu = clamp(num(base.fluencyScore) + durDelta + lenDelta);
+    const str = clamp(num(base.structureScore) + durDelta + lenDelta * 0.5);
+    const con = clamp(num(base.contentScore) + lenDelta * 1.5 + durDelta * 0.5);
+    const del = clamp(num(base.deliveryScore) + durDelta * 1.2 + lenDelta * 0.8);
+    const overall = Math.round((flu + str + con + del) / 4);
+
+    return {
+        overallScore: overall,
+        fluencyScore: flu,
+        structureScore: str,
+        contentScore: con,
+        deliveryScore: del,
+    };
+}
+
 async function analyzeExtemporeWithGemini({ topic, difficulty, category, durationSec, transcript, apiKey }) {
     const key = apiKey || process.env.GEMINI_API_KEY;
+
+    // Short-input gating: return zero scores immediately
+    if (isTooShort(durationSec, transcript)) {
+        return buildZeroAnalysis({ topic });
+    }
+
     const prompt = buildPrompt({ topic, difficulty, category, durationSec, transcript });
 
     if (!key) {
-        return buildHeuristicExtemporeAnalysis({ topic, durationSec, transcript });
+        const base = buildHeuristicExtemporeAnalysis({ topic, durationSec, transcript });
+        const hybrid = applyHybridScoring(base, durationSec, transcript);
+        return { ...base, ...hybrid };
     }
 
     try {
@@ -158,11 +216,18 @@ async function analyzeExtemporeWithGemini({ topic, difficulty, category, duratio
         const cand = resp?.data?.candidates?.[0];
         const text = cand?.content?.parts?.[0]?.text || '';
         const parsed = tryParseJson(text);
-        if (parsed && typeof parsed === 'object') return parsed;
+        if (parsed && typeof parsed === 'object') {
+            const hybrid = applyHybridScoring(parsed, durationSec, transcript);
+            return { ...parsed, ...hybrid };
+        }
 
-        return buildHeuristicExtemporeAnalysis({ topic, durationSec, transcript });
+        const base = buildHeuristicExtemporeAnalysis({ topic, durationSec, transcript });
+        const hybrid = applyHybridScoring(base, durationSec, transcript);
+        return { ...base, ...hybrid };
     } catch (e) {
-        return buildHeuristicExtemporeAnalysis({ topic, durationSec, transcript });
+        const base = buildHeuristicExtemporeAnalysis({ topic, durationSec, transcript });
+        const hybrid = applyHybridScoring(base, durationSec, transcript);
+        return { ...base, ...hybrid };
     }
 }
 
