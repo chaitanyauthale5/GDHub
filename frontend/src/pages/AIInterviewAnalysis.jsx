@@ -57,6 +57,40 @@ export default function AIInterviewAnalysis() {
     return 'from-red-400 to-pink-500';
   };
 
+  const renderHighlightedTranscript = () => {
+    const text = String(analysis?.rawTranscript || '');
+    const spans = Array.isArray(analysis?.highlights) ? [...analysis.highlights].sort((a, b) => a.start - b.start) : [];
+    let i = 0;
+    const out = [];
+    for (let idx = 0; idx < spans.length; idx++) {
+      const h = spans[idx];
+      const start = Math.max(0, Math.min(text.length, Number(h.start) || 0));
+      const end = Math.max(start, Math.min(text.length, Number(h.end) || start));
+      if (start > i) out.push(text.slice(i, start));
+      const cls = h.label === 'bad' ? 'bg-red-50 text-red-700 rounded px-0.5' : 'bg-green-50 text-green-700 rounded px-0.5';
+      const tip = h?.suggestion ? `${h.reason || h.label}. ${h.label === 'bad' ? 'Try: ' : 'Keep: '}${h.suggestion}` : (h.reason || h.label);
+      out.push(
+        <span key={`ihl-${idx}`} className={cls} title={tip}>
+          {text.slice(start, end)}
+        </span>
+      );
+      i = end;
+    }
+    if (i < text.length) out.push(text.slice(i));
+    return out.length ? out : text;
+  };
+
+  const compileHighlightSuggestions = () => {
+    const out = [];
+    const seen = new Set();
+    for (const h of (analysis?.highlights || [])) {
+      if (!h?.suggestion) continue;
+      const line = (h.label === 'bad' ? `Try: ${h.suggestion}` : `Keep: ${h.suggestion}`);
+      if (!seen.has(line)) { seen.add(line); out.push(line); }
+    }
+    return out.slice(0, 8);
+  };
+
   return (
     <div className="min-h-screen pb-20">
       <TopNav activePage="Explore" />
@@ -109,6 +143,67 @@ export default function AIInterviewAnalysis() {
           ))}
         </div>
 
+        {/* Transcript with Highlights */}
+        {analysis?.rawTranscript && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}
+            className="mb-8"
+          >
+            <ClayCard className="bg-white rounded-3xl p-6 shadow-xl border-2 border-gray-100">
+              <h2 className="text-xl font-bold mb-2">Transcript with Highlights</h2>
+              <div className="text-xs text-gray-500 mb-3">Green = good • Red = needs improvement</div>
+              <div className="whitespace-pre-wrap break-words leading-relaxed text-gray-800">{renderHighlightedTranscript()}</div>
+              {analysis?.highlightStats && (
+                <div className="mt-3 text-sm text-gray-600 flex gap-6">
+                  <div className="flex items-center gap-2"><span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span><span>{analysis.highlightStats.goodCount} good</span></div>
+                  <div className="flex items-center gap-2"><span className="inline-block w-2 h-2 bg-red-500 rounded-full"></span><span>{analysis.highlightStats.badCount} issues</span></div>
+                </div>
+              )}
+            </ClayCard>
+          </motion.div>
+        )}
+
+        {/* Highlight Details & Suggestions */}
+        {Array.isArray(analysis?.highlights) && analysis.highlights.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.48 }}
+            className="mb-8"
+          >
+            <ClayCard className="bg-white rounded-3xl p-6 shadow-xl border-2 border-gray-100">
+              <h2 className="text-xl font-bold mb-3">Highlight Details & Suggestions</h2>
+              <ul className="space-y-3">
+                {analysis.highlights.map((h, idx) => {
+                  const text = String(analysis?.rawTranscript || '');
+                  const start = Math.max(0, Math.min(text.length, Number(h.start) || 0));
+                  const end = Math.max(start, Math.min(text.length, Number(h.end) || start));
+                  const phrase = text.slice(start, end);
+                  const isBad = h.label === 'bad';
+                  return (
+                    <li key={`hld-${idx}`} className="flex items-start gap-3">
+                      <span className={`mt-1 inline-block w-2 h-2 rounded-full ${isBad ? 'bg-red-500' : 'bg-green-500'}`}></span>
+                      <div className="flex-1">
+                        <div className="text-sm">
+                          <span className="font-mono bg-gray-100 rounded px-1 py-0.5">{phrase || '(empty)'}</span>
+                          {h.pointAction && (
+                            <span className={`ml-2 text-xs rounded-full px-2 py-0.5 ${h.pointAction === 'cut' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                              {h.pointAction === 'cut' ? 'Point cut' : 'Point added'}
+                            </span>
+                          )}
+                        </div>
+                        {h.reason && <div className="text-xs text-gray-500 mt-0.5">{h.reason}</div>}
+                        {h.suggestion && (
+                          <div className="text-sm mt-1">
+                            {isBad ? 'Try: ' : 'Keep: '}
+                            {h.suggestion}
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </ClayCard>
+          </motion.div>
+        )}
+
         {/* Strengths & Improvements */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <motion.div
@@ -157,6 +252,24 @@ export default function AIInterviewAnalysis() {
             </ClayCard>
           </motion.div>
         </div>
+
+        {compileHighlightSuggestions().length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }}
+            className="mb-8"
+          >
+            <ClayCard className="bg-white rounded-3xl p-6 shadow-xl border-2 border-gray-100">
+              <h3 className="text-xl font-bold mb-3">Suggestions</h3>
+              <ul className="space-y-2">
+                {compileHighlightSuggestions().map((s, i) => (
+                  <li key={i} className="flex items-start gap-2 text-gray-700">
+                    <span className="text-teal-500 mt-1">•</span>
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            </ClayCard>
+          </motion.div>
+        )}
 
         {/* Summary */}
         <motion.div

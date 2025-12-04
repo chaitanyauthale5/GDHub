@@ -9,6 +9,125 @@ function stripCodeFence(s) {
     return t.trim();
 }
 
+function buildInterviewHighlights(raw) {
+    const text = String(raw || '');
+    if (!text) return [];
+    const lower = text.toLowerCase();
+
+    const mkRegex = (phrase) => {
+        const esc = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+        const wb = /\w$/.test(phrase[0]) ? '\\b' : '';
+        const we = /\w$/.test(phrase[phrase.length - 1]) ? '\\b' : '';
+        return new RegExp(`${wb}${esc}${we}`, 'gi');
+    };
+
+    const badFillers = ['um', 'uh', 'you know', 'like', 'actually', 'basically', 'literally', 'so', 'well', 'right', 'okay', 'ok'];
+    const weakTransitions = ['anyway', 'moving on', 'so yeah'];
+    const hedgePhrases = ['maybe', 'perhaps', 'i think', 'i guess', 'sort of', 'kind of', 'probably', 'somewhat', 'a bit', 'i feel like', 'in my opinion'];
+    const weaselWords = ['very', 'really', 'stuff', 'things', 'just'];
+
+    const goodSignposts = ['first', 'second', 'third', 'to begin with', 'next', 'finally', 'in conclusion', 'to summarize', 'overall', 'also', 'additionally', 'moreover', 'furthermore', 'another'];
+    const goodExamples = ['for example', 'for instance', 'e.g.', 'example'];
+    const goodAssertive = ['i will', 'i can', 'i did', 'we will', 'we can', 'therefore'];
+    const goodTransitions = ['however', 'on the other hand', 'nevertheless'];
+    const engagement = ['imagine', 'consider', 'what if', 'have you ever'];
+    const causality = ['because', 'as a result', 'consequently', 'thus'];
+
+    const collect = (phrases, label, reason, category, suggestion, pointAction) => {
+        const out = [];
+        for (const p of phrases) {
+            const re = mkRegex(p);
+            let m;
+            while ((m = re.exec(lower)) !== null) {
+                out.push({ start: m.index, end: m.index + m[0].length, label, reason: `${reason}: "${p}"`, category, suggestion, pointAction });
+                if (re.lastIndex === m.index) re.lastIndex++;
+            }
+        }
+        return out;
+    };
+
+    const collectRegex = (regex, label, reason, category, suggestion, pointAction) => {
+        const out = [];
+        let m;
+        regex.lastIndex = 0;
+        while ((m = regex.exec(lower)) !== null) {
+            const start = m.index;
+            const end = m.index + m[0].length;
+            out.push({ start, end, label, reason, category, suggestion, pointAction });
+            if (regex.lastIndex === m.index) regex.lastIndex++;
+        }
+        return out;
+    };
+
+    const items = [
+        ...collect(badFillers, 'bad', 'Filler or weak phrasing', 'filler', 'Pause 1–2s or use a connector (e.g., “Therefore,” “Next,”).'),
+        ...collect(weakTransitions, 'bad', 'Abrupt transition', 'transition', 'Use a specific signpost (e.g., “Next,” “Another point,” “However,”).', 'cut'),
+        ...collect(hedgePhrases, 'bad', 'Hedging/uncertain phrasing', 'hedge', 'Be more direct or briefly pause instead.'),
+        ...collect(weaselWords, 'bad', 'Vague/weasel word', 'weasel', 'Replace with a specific descriptor or remove intensifier.'),
+
+        ...collect(goodSignposts, 'good', 'Signposting/structure', 'signpost', 'Good signpost; keep guiding the listener.', 'added'),
+        ...collect(goodExamples, 'good', 'Example indicator', 'example', 'Good example; add a concise metric to strengthen it.'),
+        ...collect(goodAssertive, 'good', 'Assertive/clarifying phrase', 'assertive', 'Confident tone; pair with a specific fact.'),
+        ...collect(goodTransitions, 'good', 'Contrast/transition', 'transition', 'Good contrast; briefly summarize the shift.', 'cut'),
+        ...collect(engagement, 'good', 'Audience engagement', 'engagement', 'Good engagement; follow with a concise example.'),
+        ...collect(causality, 'good', 'Causal reasoning', 'causality', 'Clear causal link; ensure cause→effect is explicit.'),
+
+        // Data/metrics and years
+        ...collectRegex(/\b(\d+(?:\.\d+)?)\s?(%|percent|years?|mins?|minutes?|hrs?|hours|rupees|rs|₹|\$)\b/gi, 'good', 'Specific data/metric', 'data', 'Good specifics; tie it to your main point.'),
+        ...collectRegex(/\b(19|20)\d{2}\b/gi, 'good', 'Specific year', 'data', 'Add why this date matters.'),
+
+        // Approx passive voice
+        ...collectRegex(/\b(was|were|is|are|be|been|being)\s+[a-z]+(?:ed|en)\b(?:\s+by\b)?/gi, 'bad', 'Possible passive voice', 'passive', 'Prefer active voice (e.g., “We completed X”).'),
+
+        // Repetition
+        ...collectRegex(/\b(\w+)\b(?:\s+\1){2,}/gi, 'bad', 'Word repeated many times', 'repetition', 'Reduce repetition or use synonyms.'),
+
+        // Etc.
+        ...collectRegex(/\betc\./gi, 'bad', 'Vague ending “etc.”', 'weasel', 'Replace “etc.” with concrete items or remove.'),
+    ];
+
+    // Long sentences and weak starts
+    try {
+        const sentenceRegex = /[^.!?]+[.!?]?/g;
+        let m;
+        while ((m = sentenceRegex.exec(text)) !== null) {
+            const s = m[0];
+            const start = m.index;
+            const end = start + s.length;
+            const wc = (s.toLowerCase().match(/\b[a-z']+\b/g) || []).length;
+            if (wc > 35) items.push({ start, end, label: 'bad', reason: 'Very long sentence (possible run-on)', category: 'runon', suggestion: 'Split into two sentences.', pointAction: undefined });
+            const leading = s.trimStart();
+            const off = s.length - leading.length;
+            const m2 = leading.match(/^(and|but|so)\b/i);
+            if (m2) {
+                const w = m2[0];
+                items.push({ start: start + off, end: start + off + w.length, label: 'bad', reason: 'Weak sentence start', category: 'weakStart', suggestion: 'Use a clearer transition (e.g., “However,” “Therefore,”).', pointAction: undefined });
+            }
+            if (sentenceRegex.lastIndex === m.index) sentenceRegex.lastIndex++;
+        }
+    } catch { }
+
+    // Sort and resolve overlaps
+    items.sort((a, b) => a.start - b.start || b.end - a.end);
+    const merged = [];
+    for (const it of items) {
+        const last = merged[merged.length - 1];
+        if (!last || it.start >= last.end) { merged.push(it); continue; }
+        if (last.label === 'bad' || it.label === 'good') { continue; } else { merged[merged.length - 1] = it; }
+    }
+    return merged;
+}
+
+function summarizeInterviewHighlights(highlights) {
+    const stats = { goodCount: 0, badCount: 0, categories: {} };
+    for (const h of highlights || []) {
+        if (h.label === 'good') stats.goodCount++;
+        else if (h.label === 'bad') stats.badCount++;
+        if (h.category) stats.categories[h.category] = (stats.categories[h.category] || 0) + 1;
+    }
+    return stats;
+}
+
 function safeJsonParse(s) {
     try {
         return JSON.parse(stripCodeFence(s));
@@ -239,14 +358,24 @@ export async function analyzeInterview({ transcript, interview_type = 'hr', role
         const json = await callGeminiJson(prompt);
         if (json && typeof json === 'object') {
             const nn = (v, d = 0) => Number.isFinite(Number(v)) ? Math.max(0, Math.min(100, Math.round(Number(v)))) : d;
+            const userOnly = extractUserUtterances(text) || text;
+            const hl = buildInterviewHighlights(userOnly);
+            const hs = summarizeInterviewHighlights(hl);
+            const communication_score = nn(json.communication_score ?? json.communicationScore);
+            const confidence_score = nn(json.confidence_score ?? json.confidenceScore);
+            const content_score = nn(json.content_score ?? json.contentScore);
+            const overall_score = computeCalibratedInterviewOverall(communication_score, confidence_score, content_score, hs);
             return {
-                overall_score: nn(json.overall_score ?? json.overallScore),
-                communication_score: nn(json.communication_score ?? json.communicationScore),
-                confidence_score: nn(json.confidence_score ?? json.confidenceScore),
-                content_score: nn(json.content_score ?? json.contentScore),
+                overall_score,
+                communication_score,
+                confidence_score,
+                content_score,
                 strengths: Array.isArray(json.strengths) ? json.strengths : [],
                 improvements: Array.isArray(json.improvements) ? json.improvements : [],
                 summary: json.summary || '',
+                rawTranscript: userOnly,
+                highlights: hl,
+                highlightStats: hs,
             };
         }
     }
@@ -260,7 +389,9 @@ export async function analyzeInterview({ transcript, interview_type = 'hr', role
     const communication_score = clampScore(70 - fillerCount * 2 - Math.max(0, Math.abs(avgSent - 18)), 40, 90);
     const confidence_score = clampScore(65 - Math.min(fillerCount * 2, 20) + Math.min(words.length / 25, 25), 40, 90);
     const content_score = clampScore(60 + Math.min(words.length / 30, 30), 45, 90);
-    const overall_score = Math.round((communication_score + confidence_score + content_score) / 3);
+    const hl = buildInterviewHighlights(userOnly);
+    const hs = summarizeInterviewHighlights(hl);
+    const overall_score = computeCalibratedInterviewOverall(communication_score, confidence_score, content_score, hs);
     return {
         overall_score,
         communication_score,
@@ -269,11 +400,25 @@ export async function analyzeInterview({ transcript, interview_type = 'hr', role
         strengths: ['Clear points in parts of the interview'],
         improvements: ['Reduce filler words and add concrete examples'],
         summary: 'Baseline interview assessment generated locally.',
+        rawTranscript: userOnly,
+        highlights: hl,
+        highlightStats: hs,
     };
 }
 
 function clampScore(value, min, max) {
     return Math.round(Math.max(min, Math.min(max, value)));
+}
+
+function computeCalibratedInterviewOverall(communication, confidence, content, highlightStats) {
+    const wComm = 0.38;
+    const wContent = 0.40;
+    const wConf = 0.22;
+    const base = (communication * wComm) + (content * wContent) + (confidence * wConf);
+    const good = Math.max(0, (highlightStats && highlightStats.goodCount) || 0);
+    const bad = Math.max(0, (highlightStats && highlightStats.badCount) || 0);
+    const adj = Math.max(-12, Math.min(8, good * 0.5 - bad * 1));
+    return clampScore(Math.round(base + adj), 0, 100);
 }
 
 function extractUserUtterances(text) {
