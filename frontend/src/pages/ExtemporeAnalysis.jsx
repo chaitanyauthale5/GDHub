@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { api, API_BASE_URL } from '@/api/apiClient';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { api } from '@/api/apiClient';
 
 import { motion } from 'framer-motion';
-import { Award, TrendingUp, AlertCircle, CheckCircle, Mic, Clock, MessageSquare, Home, RotateCcw } from 'lucide-react';
+import { AlertCircle, Award, CheckCircle, Clock, Home, MessageSquare, Mic, RotateCcw, TrendingUp } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
 
 export default function ExtemporeAnalysis() {
@@ -33,49 +33,33 @@ export default function ExtemporeAnalysis() {
     setLoading(false);
   };
 
+  const loadSavedAnalysis = async (sid) => {
+    try {
+      const [s] = await api.entities.ExtemporeSession.filter({ id: sid });
+      if (s && s.ai_feedback) {
+        try { setAnalysis(JSON.parse(s.ai_feedback)); return; } catch {}
+      }
+    } catch {}
+    setAnalysis(null);
+  };
+
   const generateAnalysis = async (sessionData) => {
     try {
-      const response = await api.integrations.Core.InvokeLLM({
-
-        prompt: `Analyze this extempore speaking session and provide detailed feedback:
-
-Topic: ${sessionData.topic}
-Difficulty: ${sessionData.difficulty}
-Speaking Duration: ${sessionData.speaking_duration || 60} seconds
-Category: ${sessionData.category}
-
-Generate a comprehensive extempore analysis in JSON format with:
-1. overallScore: A score out of 100
-2. fluencyScore: Score for speaking without hesitation (out of 100)
-3. structureScore: Score for logical organization (out of 100)
-4. contentScore: Score for topic relevance and depth (out of 100)
-5. deliveryScore: Score for voice modulation and pace (out of 100)
-6. strengths: Array of 3-4 things done well
-7. improvements: Array of 3-4 areas to improve
-8. openingTips: A tip for better opening
-9. closingTips: A tip for better conclusion
-10. detailedFeedback: A paragraph of personalized feedback
-11. practiceTopics: Array of 3 related topics to practice next`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            overallScore: { type: "number" },
-            fluencyScore: { type: "number" },
-            structureScore: { type: "number" },
-            contentScore: { type: "number" },
-            deliveryScore: { type: "number" },
-            strengths: { type: "array", items: { type: "string" } },
-            improvements: { type: "array", items: { type: "string" } },
-            openingTips: { type: "string" },
-            closingTips: { type: "string" },
-            detailedFeedback: { type: "string" },
-            practiceTopics: { type: "array", items: { type: "string" } }
-          }
-        }
+      const headers = { 'Content-Type': 'application/json' };
+      const key = (import.meta?.env && import.meta.env.VITE_GEMINI_API_KEY) || '';
+      if (key) headers['x-gemini-key'] = key;
+      const resp = await fetch(`${API_BASE_URL}/api/extempore/sessions/${sessionData.id}/analyze`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({})
       });
-      setAnalysis(response);
+      if (!resp.ok) { await loadSavedAnalysis(sessionData.id); return; }
+      const data = await resp.json();
+      if (data && data.analysis) setAnalysis(data.analysis); else await loadSavedAnalysis(sessionData.id);
     } catch (error) {
       console.error('Error generating analysis:', error);
+      await loadSavedAnalysis(sessionData.id);
     }
   };
 

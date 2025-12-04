@@ -13,6 +13,7 @@ export default function Call() {
   const { user } = useAuth();
 
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const mode = location.state?.mode;
   const rawId = params.get('roomId') || params.get('roomID') || params.get('roomid');
   const roomId = rawId && rawId !== 'null' && rawId !== 'undefined' ? rawId : null;
 
@@ -127,6 +128,16 @@ export default function Call() {
 
   const handleEndCall = async () => {
     try {
+      // In global GD mode, also notify the global matching backend that this user left the room.
+      if (mode === 'global' && user && roomId) {
+        const userId = user.email || user.id;
+        try {
+          await api.globalGd.leaveRoom({ userId, roomId });
+        } catch (e) {
+          console.error('Failed to notify global GD leave-room', e);
+        }
+      }
+
       await leaveRoom();
     } finally {
       if (roomId) {

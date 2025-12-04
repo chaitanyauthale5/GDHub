@@ -44,10 +44,10 @@ async function request(method, path, body, headers = {}) {
   return await safeJson(resp);
 }
 
-const get = (p) => request('GET', p);
-const post = (p, b) => request('POST', p, b);
-const patchReq = (p, b) => request('PATCH', p, b);
-const del = (p) => request('DELETE', p);
+const get = (p, headers) => request('GET', p, undefined, headers);
+const post = (p, b, headers) => request('POST', p, b, headers);
+const patchReq = (p, b, headers) => request('PATCH', p, b, headers);
+const del = (p, headers) => request('DELETE', p, undefined, headers);
 
 // Map entity model name -> backend route
 const entityToPath = {
@@ -62,6 +62,7 @@ const entityToPath = {
   DebateRoom: '/api/debate-rooms',
   GDSession: '/api/gd-sessions',
   ExtemporeSession: '/api/extempore-sessions',
+  ExtemporeMessage: '/api/extempore-messages',
   AIInterview: '/api/ai-interviews',
   AIInterviewSession: '/api/ai-interview-sessions',
   ChatMessage: '/api/chat-messages',
@@ -122,6 +123,7 @@ const entities = {
   DebateRoom: makeEntity(entityToPath.DebateRoom),
   GDSession: makeEntity(entityToPath.GDSession),
   ExtemporeSession: makeEntity(entityToPath.ExtemporeSession),
+  ExtemporeMessage: makeEntity(entityToPath.ExtemporeMessage),
   AIInterview: makeEntity(entityToPath.AIInterview),
   AIInterviewSession: makeEntity(entityToPath.AIInterviewSession),
   ChatMessage: makeEntity(entityToPath.ChatMessage),
@@ -130,16 +132,61 @@ const entities = {
 };
 
 const tournaments = {
-  async register(payload) {
-    const { tournamentId, user_id, user_name, user_email, group_number, accepted_rules } = payload || {};
+  async register(args) {
+    const a = args || {};
+    const { tournamentId, user_id, user_name, user_email, group_number, accepted_rules } = a;
     if (!tournamentId) throw new Error('Missing tournamentId');
-    return post(`/api/tournaments/${tournamentId}/register`, {
-      user_id,
-      user_name,
-      user_email,
-      group_number,
-      accepted_rules,
-    });
+    return post(`/api/tournaments/${tournamentId}/register`, { user_id, user_name, user_email, group_number, accepted_rules });
+  },
+  async createOrganiserLink(args) {
+    const a = args || {};
+    const { tournamentId, organiser_email, organiser_name, expires_in_hours } = a;
+    if (!tournamentId) throw new Error('Missing tournamentId');
+    return post(`/api/tournaments/${tournamentId}/organiser-link`, { organiser_email, organiser_name, expires_in_hours });
+  },
+  async validateAccess(args) {
+    const a = args || {};
+    const { tournamentId, accessToken } = a;
+    if (!tournamentId) throw new Error('Missing tournamentId');
+    const params = new URLSearchParams();
+    if (accessToken) params.set('accessToken', accessToken);
+    return get(`/api/tournaments/${tournamentId}/validate-access${params.toString() ? `?${params.toString()}` : ''}`);
+  },
+  async validateOrganiserSession(tournamentId) {
+    if (!tournamentId) throw new Error('Missing tournamentId');
+    return get(`/api/tournaments/${tournamentId}/validate-organiser`);
+  },
+  async inviteJudge(args) {
+    const a = args || {};
+    const { tournamentId, email, name, host_email, expires_in_hours, frontendUrl, accessToken } = a;
+    if (!tournamentId) throw new Error('Missing tournamentId');
+    const headers = {};
+    if (accessToken) headers['x-access-token'] = accessToken;
+    return post(`/api/tournaments/${tournamentId}/invite-judge`, { email, name, host_email, expires_in_hours, frontendUrl }, headers);
+  },
+  async sendTimeSlot(args) {
+    const a = args || {};
+    const { tournamentId, registration_id, user_email, group_number, room_code, time_slot, host_email, accessToken } = a;
+    if (!tournamentId) throw new Error('Missing tournamentId');
+    const headers = {};
+    if (accessToken) headers['x-access-token'] = accessToken;
+    return post(`/api/tournaments/${tournamentId}/send-time-slot`, { registration_id, user_email, group_number, room_code, time_slot, host_email }, headers);
+  },
+  async start(args) {
+    const a = args || {};
+    const { tournamentId, accessToken } = a;
+    if (!tournamentId) throw new Error('Missing tournamentId');
+    const headers = {};
+    if (accessToken) headers['x-access-token'] = accessToken;
+    return post(`/api/tournaments/${tournamentId}/start`, {}, headers);
+  },
+  async restart(args) {
+    const a = args || {};
+    const { tournamentId, accessToken } = a;
+    if (!tournamentId) throw new Error('Missing tournamentId');
+    const headers = {};
+    if (accessToken) headers['x-access-token'] = accessToken;
+    return post(`/api/tournaments/${tournamentId}/restart`, {}, headers);
   },
 };
 
@@ -251,9 +298,85 @@ const integrations = {
 };
 
 const zego = {
-  async getRoomToken({ roomId, user_id, user_name }) {
-    return post('/api/zego/token', { roomId, user_id, user_name });
+  async getRoomToken({ roomId, user_id, user_name, canPublish = true }) {
+    return post('/api/zego/token', { roomId, user_id, user_name, canPublish });
   },
 };
 
-export const api = { auth, entities, appLogs, integrations, zego, tournaments };
+const globalGd = {
+  async join({ userId, name }) {
+    return post('/api/global-gd/join', { userId, name });
+  },
+  async status({ userId }) {
+    const params = new URLSearchParams();
+    params.set('userId', String(userId));
+    return get(`/api/global-gd/status?${params.toString()}`);
+  },
+  async leave({ userId }) {
+    return post('/api/global-gd/leave', { userId });
+  },
+  async leaveRoom({ userId, roomId }) {
+    return post('/api/global-gd/leave-room', { userId, roomId });
+  },
+};
+
+let api = { auth, entities, appLogs, integrations, zego, globalGd };
+const rooms = {
+  gd: {
+    async start(id, args) {
+      const a = args || {};
+      const headers = {};
+      if (a.accessToken) headers['x-access-token'] = a.accessToken;
+      return post(`/api/gd-rooms/${id}/start`, { host_email: a.host_email }, headers);
+    },
+    async stop(id, args) {
+      const a = args || {};
+      const headers = {};
+      if (a.accessToken) headers['x-access-token'] = a.accessToken;
+      return post(`/api/gd-rooms/${id}/stop`, { host_email: a.host_email }, headers);
+    },
+    async restart(id, args) {
+      const a = args || {};
+      const headers = {};
+      if (a.accessToken) headers['x-access-token'] = a.accessToken;
+      return post(`/api/gd-rooms/${id}/restart`, { host_email: a.host_email }, headers);
+    },
+    async forceClose(id, args) {
+      const a = args || {};
+      const headers = {};
+      if (a.accessToken) headers['x-access-token'] = a.accessToken;
+      return post(`/api/gd-rooms/${id}/force-close`, { host_email: a.host_email }, headers);
+    },
+  },
+  debate: {
+    async start(id, args) {
+      const a = args || {};
+      const headers = {};
+      if (a.accessToken) headers['x-access-token'] = a.accessToken;
+      return post(`/api/debate-rooms/${id}/start`, { host_email: a.host_email }, headers);
+    },
+    async stop(id, args) {
+      const a = args || {};
+      const headers = {};
+      if (a.accessToken) headers['x-access-token'] = a.accessToken;
+      return post(`/api/debate-rooms/${id}/stop`, { host_email: a.host_email }, headers);
+    },
+    async restart(id, args) {
+      const a = args || {};
+      const headers = {};
+      if (a.accessToken) headers['x-access-token'] = a.accessToken;
+      return post(`/api/debate-rooms/${id}/restart`, { host_email: a.host_email }, headers);
+    },
+    async forceClose(id, args) {
+      const a = args || {};
+      const headers = {};
+      if (a.accessToken) headers['x-access-token'] = a.accessToken;
+      return post(`/api/debate-rooms/${id}/force-close`, { host_email: a.host_email }, headers);
+    },
+  },
+};
+
+// Final export including tournaments/rooms
+api = { ...api, tournaments, rooms };
+export { api };
+

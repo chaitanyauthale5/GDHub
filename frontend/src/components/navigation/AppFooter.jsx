@@ -14,7 +14,8 @@ export default function AppFooter() {
     p === '/createdebateroom' ||
     p === '/createtournament' ||
     p === '/lobby' ||
-    p === '/debateLobby'.toLowerCase() ||
+    p.startsWith('/lobby/') ||
+    p === '/debatelobby' ||
     p === '/debateroom' ||
     p === '/gdprepare' ||
     p === '/gdroom' ||

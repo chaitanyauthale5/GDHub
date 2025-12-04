@@ -3,14 +3,17 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError'
 import { AuthProvider, useAuth } from '@/lib/AuthContext'
 import NavigationTracker from '@/lib/NavigationTracker'
 import { queryClientInstance } from '@/lib/query-client'
-import VisualEditAgent from '@/lib/VisualEditAgent'
 import { SocketProvider } from '@/lib/SocketContext'
+import VisualEditAgent from '@/lib/VisualEditAgent'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { Route, BrowserRouter as Router, Routes, useLocation } from 'react-router-dom'
 import './App.css'
+import AppFooter from './components/navigation/AppFooter'
 import PageNotFound from './lib/PageNotFound'
 import { pagesConfig } from './pages.config'
-import AppFooter from './components/navigation/AppFooter'
+import Global from './pages/Global'
+import FindingParticipants from './pages/FindingParticipants'
+import GlobalLobby from './pages/GlobalLobby'
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -32,7 +35,9 @@ const AuthenticatedApp = () => {
     p === '/terms' ||
     p === '/privacy' ||
     p === '/login' ||
-    p === '/register'
+    p === '/register' ||
+    p === '/organiser' ||
+    p === '/judgepanel'
   );
 
   // Show loading spinner while checking app public settings or auth
@@ -65,6 +70,30 @@ const AuthenticatedApp = () => {
           <MainPage />
         </LayoutWrapper>
       } />
+      <Route
+        path="/global"
+        element={
+          <LayoutWrapper currentPageName="Global">
+            <Global />
+          </LayoutWrapper>
+        }
+      />
+      <Route
+        path="/finding"
+        element={
+          <LayoutWrapper currentPageName="Global">
+            <FindingParticipants />
+          </LayoutWrapper>
+        }
+      />
+      <Route
+        path="/lobby/:roomId"
+        element={
+          <LayoutWrapper currentPageName="Global">
+            <GlobalLobby />
+          </LayoutWrapper>
+        }
+      />
       {Object.entries(Pages).map(([path, Page]) => (
         <Route
           key={path}

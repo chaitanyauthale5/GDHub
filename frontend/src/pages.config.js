@@ -27,10 +27,12 @@ import GDRoom from './pages/GDRoom';
 import HumanInterviewRoom from './pages/HumanInterviewRoom';
 import JoinDebateRoom from './pages/JoinDebateRoom';
 import JoinRoom from './pages/JoinRoom';
+import JudgePanel from './pages/JudgePanel';
 import Landing from './pages/Landing';
 import Leaderboard from './pages/Leaderboard';
 import Lobby from './pages/Lobby';
 import Login from './pages/Login';
+import Organiser from './pages/Organiser';
 import PostGDFeedback from './pages/PostGDFeedback';
 import Privacy from './pages/Privacy';
 import Profile from './pages/Profile';
@@ -88,6 +90,8 @@ export const PAGES = {
     "Contact": Contact,
     "Terms": Terms,
     "Privacy": Privacy,
+    "Organiser": Organiser,
+    "JudgePanel": JudgePanel,
 }
 
 export const pagesConfig = {

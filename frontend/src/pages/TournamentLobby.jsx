@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { api } from '@/api/apiClient';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { api } from '@/api/apiClient';
 
-import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Users, Clock, ArrowLeft, Play, Shuffle, CheckCircle2 } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ArrowLeft, CheckCircle2, Clock, Play, Trophy, Users } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
 
@@ -21,6 +21,9 @@ export default function TournamentLobby() {
   const [isHost, setIsHost] = useState(false);
   const [loading, setLoading] = useState(true);
   const [groupsFormed, setGroupsFormed] = useState(false);
+  const [myRoomId, setMyRoomId] = useState(null);
+  const [isReady, setIsReady] = useState(false);
+  const [readyLoading, setReadyLoading] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -52,7 +55,35 @@ export default function TournamentLobby() {
         // Find my group
         const myReg = regs.find(r => r.user_id === currentUser.email);
         if (myReg && myReg.group_number !== undefined) {
-          setMyGroup(myReg.group_number);
+          setMyGroup(() => myReg.group_number);
+        }
+
+        try {
+          const rooms = await api.entities.GDRoom.filter({ tournament_id: tournamentId });
+          const myRoom = myReg
+            ? rooms.find(r => Number(r.group_number) === Number(myReg.group_number))
+            : null;
+
+          if (myRoom) {
+            setMyRoomId(myRoom.id);
+            const meInRoom = (myRoom.participants || []).find(
+              p => p && (p.user_id === currentUser.email || p.user_id === currentUser.id)
+            );
+            setIsReady(!!meInRoom?.joined_at);
+
+            if (
+              tournamentData.type === 'gd' &&
+              (tournamentData.status === 'active' || myRoom.status === 'active')
+            ) {
+              navigate(createPageUrl(`Lobby?roomId=${myRoom.id}`));
+              return;
+            }
+          } else {
+            setMyRoomId(null);
+            setIsReady(false);
+          }
+        } catch (e) {
+          console.error('Error loading tournament rooms for user:', e);
         }
       }
     } catch (error) {
@@ -85,6 +116,39 @@ export default function TournamentLobby() {
       await api.entities.TournamentRegistration.update(myReg[0].id, { status: 'joined' });
 
       loadData();
+    }
+  };
+
+  const markReady = async () => {
+    if (!user || !myRoomId || isReady || readyLoading) return;
+    setReadyLoading(true);
+    try {
+      const [room] = await api.entities.GDRoom.filter({ id: myRoomId });
+      if (!room) return;
+
+      const email = user.email || user.id;
+      const participants = Array.isArray(room.participants) ? [...room.participants] : [];
+      const idx = participants.findIndex(
+        p => p && (p.user_id === email || p.user_id === user.id)
+      );
+      const now = new Date().toISOString();
+
+      if (idx >= 0) {
+        participants[idx] = { ...participants[idx], joined_at: now };
+      } else {
+        participants.push({
+          user_id: email,
+          name: user.full_name || email,
+          joined_at: now,
+        });
+      }
+
+      await api.entities.GDRoom.update(room.id, { participants });
+      setIsReady(true);
+    } catch (error) {
+      console.error('Error marking tournament ready:', error);
+    } finally {
+      setReadyLoading(false);
     }
   };
 
@@ -223,8 +287,8 @@ export default function TournamentLobby() {
           </ClayCard>
         </div>
 
-        {/* Join Button */}
-        {!hasJoined && (
+        {/* Join Button (hidden for organiser/host) */}
+        {!hasJoined && !isHost && (
           <ClayCard className="mb-8 text-center bg-gradient-to-r from-purple-50 to-blue-50">
             <h3 className="text-xl font-bold mb-4">Ready to join the tournament?</h3>
             <motion.button
@@ -238,32 +302,20 @@ export default function TournamentLobby() {
           </ClayCard>
         )}
 
-        {/* Host Controls */}
-        {isHost && hasJoined && (
+        {/* Organiser hint (host should manage from Organiser panel) */}
+        {isHost && (
           <ClayCard className="mb-8 bg-gradient-to-r from-orange-50 to-pink-50">
-            <h3 className="text-xl font-bold mb-4">Host Controls</h3>
-            <div className="flex flex-wrap gap-4">
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={shuffleAndFormGroups}
-                disabled={groupsFormed}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 text-white font-bold flex items-center gap-2 disabled:opacity-50"
-              >
-                <Shuffle className="w-5 h-5" />
-                {groupsFormed ? 'Groups Formed' : 'Shuffle & Form Groups'}
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={startTournament}
-                disabled={!groupsFormed}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-green-400 to-teal-500 text-white font-bold flex items-center gap-2 disabled:opacity-50"
-              >
-                <Play className="w-5 h-5" />
-                Start Tournament
-              </motion.button>
-            </div>
+            <h3 className="text-xl font-bold mb-2">Organiser Panel</h3>
+            <p className="text-sm text-gray-700 mb-4">Use the organiser dashboard to manage groups and lobbies. You are not placed into any lobby.</p>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => navigate(createPageUrl(`Organiser?tournamentId=${tournamentId}`))}
+              className="px-6 py-3 rounded-xl bg-gradient-to-r from-orange-400 to-pink-500 text-white font-bold flex items-center gap-2"
+            >
+              <Play className="w-5 h-5" />
+              Open Organiser Panel
+            </motion.button>
           </ClayCard>
         )}
 
@@ -282,11 +334,27 @@ export default function TournamentLobby() {
                   <ClayCard className={`${myGroup === index + 1 ? 'border-2 border-green-400 bg-green-50' : ''}`}>
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-bold">Group {index + 1}</h3>
-                      {myGroup === index + 1 && (
-                        <span className="px-3 py-1 rounded-full bg-green-500 text-white text-xs font-bold">
-                          Your Group
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {myGroup === index + 1 && (
+                          <span className="px-3 py-1 rounded-full bg-green-500 text-white text-xs font-bold">
+                            Your Group
+                          </span>
+                        )}
+                        {myGroup === index + 1 && !isHost && (
+                          <button
+                            type="button"
+                            onClick={markReady}
+                            disabled={isReady || readyLoading || !myRoomId}
+                            className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                              isReady
+                                ? 'bg-green-100 text-green-700 border-green-300'
+                                : 'bg-blue-500 text-white border-blue-600'
+                            }`}
+                          >
+                            {isReady ? 'Ready' : (readyLoading ? 'Marking...' : 'Ready?')}
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="space-y-2">
                       {group.map((participant, pIndex) => (
