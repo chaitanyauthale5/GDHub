@@ -13,7 +13,6 @@ export default function Call() {
   const { user } = useAuth();
 
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const roomId = params.get('roomId') || params.get('roomID') || params.get('roomid');
   const mode = location.state?.mode;
   const rawId = params.get('roomId') || params.get('roomID') || params.get('roomid');
   const roomId = rawId && rawId !== 'null' && rawId !== 'undefined' ? rawId : null;
