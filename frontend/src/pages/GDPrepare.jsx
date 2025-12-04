@@ -15,6 +15,10 @@ export default function GDPrepare() {
   const roomId = urlParams.get('roomId');
 
   useEffect(() => {
+    if (!roomId || roomId === 'null' || roomId === 'undefined') {
+      navigate(createPageUrl('Dashboard'));
+      return;
+    }
     loadRoom();
   }, []);
 
@@ -114,6 +118,18 @@ export default function GDPrepare() {
 
           <h1 className="text-3xl font-black text-white mb-2">Prepare Yourself</h1>
           <p className="text-white/70 mb-8">Take a moment to think about the topic</p>
+
+          {/* Skip waiting */}
+          {roomId && roomId !== 'null' && roomId !== 'undefined' && (
+            <div className="mb-6">
+              <button
+                onClick={() => navigate(createPageUrl(`Call?roomId=${roomId}`))}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold shadow-lg hover:shadow-xl transition-all"
+              >
+                Skip & Join Now
+              </button>
+            </div>
+          )}
 
           {/* Topic Card */}
           <div className="bg-white/10 rounded-2xl p-6 mb-6 border border-white/20">

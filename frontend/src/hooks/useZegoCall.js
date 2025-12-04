@@ -23,7 +23,7 @@ function attachStreamToVideoElement(videoEl, stream, { muted = false } = {}) {
     }
 }
 
-export default function useZegoCall({ roomId, user, autoJoin = true }) {
+export default function useZegoCall({ roomId, user, autoJoin = true, canPublish = true }) {
     const [localStream, setLocalStream] = useState(null);
     const [remoteStreams, setRemoteStreams] = useState({}); // key: streamID -> MediaStream
     const [micOn, setMicOn] = useState(true);
@@ -115,22 +115,27 @@ export default function useZegoCall({ roomId, user, autoJoin = true }) {
                 roomId,
                 user_id,
                 user_name,
+                canPublish,
             });
 
             const engine = ensureEngine(appID, serverURL);
 
             await engine.loginRoom(roomID, token, { userID, userName }, { userUpdate: true });
 
-            const local = await engine.createStream({
-                camera: {
-                    audio: true,
-                    video: true,
-                },
-            });
-
-            setLocalStream(local);
-            const streamID = `${roomID}_${userID}`;
-            await engine.startPublishingStream(streamID, local);
+            let streamID = null;
+            if (canPublish) {
+                const local = await engine.createStream({
+                    camera: {
+                        audio: true,
+                        video: true,
+                    },
+                });
+                setLocalStream(local);
+                streamID = `${roomID}_${userID}`;
+                await engine.startPublishingStream(streamID, local);
+            } else {
+                setLocalStream(null);
+            }
 
             tokenInfoRef.current = { appID, serverURL, userID, userName, roomID, streamID };
             setDiagnostics((d) => ({ ...d, appID, roomID, userID }));

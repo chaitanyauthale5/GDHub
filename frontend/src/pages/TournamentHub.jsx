@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import { api } from '@/api/apiClient';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { api } from '@/api/apiClient';
 
-import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Search, Plus, Users, Calendar, Lock, Globe, ArrowRight, X, Building2, GraduationCap } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { motion } from 'framer-motion';
+import { ArrowRight, Building2, Calendar, Globe, GraduationCap, Lock, Plus, Search, Trophy, Users } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
-import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export default function TournamentHub() {
   const navigate = useNavigate();
@@ -25,6 +26,13 @@ export default function TournamentHub() {
   const [selectedTournament, setSelectedTournament] = useState(null);
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
+
+  // Registration modal state
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [regName, setRegName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [acceptRules, setAcceptRules] = useState(false);
+  const [registerError, setRegisterError] = useState('');
 
   useEffect(() => {
     loadData();
@@ -51,11 +59,17 @@ export default function TournamentHub() {
     }
   };
 
+  const statusLabels = {
+    registering: 'Open',
+    active: 'Ongoing',
+    completed: 'Closed',
+  };
+
   const handleSearch = async () => {
     if (!searchId.trim()) return;
     
     try {
-      const results = await api.entities.Tournament.filter({ tournament_id: searchId.toUpperCase() });
+      const results = await api.entities.Tournament.filter({ tournament_id: searchId.trim() });
 
       if (results.length > 0) {
         setSearchResult(results[0]);
@@ -76,41 +90,55 @@ export default function TournamentHub() {
     return registrations.find(r => r.tournament_id === tournamentId);
   };
 
-  const registerForTournament = async (tournament) => {
+  const registerForTournament = (tournament) => {
     if (!user) return;
-    
-    const generatedPassword = Math.random().toString(36).substring(2, 8).toUpperCase();
-    
-    const registration = await api.entities.TournamentRegistration.create({
-      tournament_id: tournament.id,
-      user_id: user.email,
-      user_name: user.full_name,
-      user_email: user.email,
-      password: generatedPassword,
-      status: 'registered'
-    });
+    setSelectedTournament(tournament);
+    setRegName(user?.full_name || '');
+    setRegEmail(user?.email || '');
+    setAcceptRules(false);
+    setRegisterError('');
+    setShowRegisterModal(true);
+  };
 
-    // Send email with password
-    await api.integrations.Core.SendEmail({
-      to: user.email,
-      subject: `Tournament Registration: ${tournament.name}`,
-      body: `
-        <h2>You have registered for ${tournament.name}!</h2>
-        <p>Your unique join password is: <strong>${generatedPassword}</strong></p>
-        <p>Please save this password. You'll need it to join the tournament.</p>
-        <br/>
-        <p>Tournament Details:</p>
-        <ul>
-          <li>Organizer: ${tournament.organizer}</li>
-          <li>Type: ${tournament.type.toUpperCase()}</li>
-          <li>Group Size: ${tournament.group_size}</li>
-        </ul>
-        <p>Good luck!</p>
-      `
-    });
+  const submitRegistration = async () => {
+    if (!selectedTournament) return;
+    if (!regName.trim()) {
+      setRegisterError('Please enter your full name.');
+      return;
+    }
+    if (!regEmail.trim() || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(regEmail.trim())) {
+      setRegisterError('Please enter a valid email address.');
+      return;
+    }
+    if (!acceptRules) {
+      setRegisterError('You must accept the tournament rules to proceed.');
+      return;
+    }
 
-    alert(`Registered successfully! Your password has been sent to ${user.email}`);
-    loadData();
+    try {
+      await api.tournaments.register({
+        tournamentId: selectedTournament.id,
+        user_id: regEmail.trim(),
+        user_name: regName.trim(),
+        user_email: regEmail.trim(),
+        accepted_rules: true,
+      });
+      setShowRegisterModal(false);
+      alert(`Registered successfully! A confirmation email has been sent to ${regEmail.trim()}`);
+      loadData();
+    } catch (error) {
+      const status = Number(error?.status || 0);
+      if (status === 409) {
+        setShowRegisterModal(false);
+        alert('You are already registered for this tournament.');
+        loadData();
+      } else if (status === 400) {
+        setRegisterError(error.message || 'Registration for this tournament is closed or full.');
+      } else {
+        console.error('Error registering:', error);
+        setRegisterError('Unable to register for this tournament right now.');
+      }
+    }
   };
 
   const handleJoinTournament = (tournament, registration) => {
@@ -157,7 +185,7 @@ export default function TournamentHub() {
             <Input
               placeholder="Search by Tournament ID..."
               value={searchId}
-              onChange={(e) => setSearchId(e.target.value.toUpperCase())}
+              onChange={(e) => setSearchId(e.target.value)}
               className="clay-card border-none h-14 text-lg"
             />
             <motion.button
@@ -205,9 +233,28 @@ export default function TournamentHub() {
                       )}
                       <span className="text-sm capitalize">{searchResult.visibility}</span>
                     </div>
+                    <div className="mt-1 text-xs text-gray-500">
+                      <span className="mr-3">ID: {searchResult.tournament_id}</span>
+                      <span>
+                        Date &amp; Time:{' '}
+                        {searchResult.start_date ? new Date(searchResult.start_date).toLocaleString() : 'TBA'}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs font-semibold text-gray-700">
+                      Status: {statusLabels[searchResult.status] || searchResult.status}
+                    </div>
                   </div>
                 </div>
-                {isRegistered(searchResult.id) ? (
+                {(user && searchResult.host_id === user.email) ? (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => navigate(createPageUrl(`Organiser?tournamentId=${searchResult.id}`))}
+                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-orange-400 to-pink-500 text-white font-bold"
+                  >
+                    Open Organiser Panel
+                  </motion.button>
+                ) : isRegistered(searchResult.id) ? (
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
@@ -286,6 +333,7 @@ export default function TournamentHub() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {tournaments.map((tournament, index) => {
               const registered = isRegistered(tournament.id);
+              const isHost = user && tournament.host_id === user.email;
               const registration = getRegistration(tournament.id);
               
               return (
@@ -301,7 +349,7 @@ export default function TournamentHub() {
                         <Trophy className="w-7 h-7 text-white" />
                       </div>
                       <span className="px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-bold">
-                        {tournament.status}
+                        {statusLabels[tournament.status] || tournament.status}
                       </span>
                     </div>
                     
@@ -323,7 +371,7 @@ export default function TournamentHub() {
                       </div>
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Calendar className="w-4 h-4" />
-                        {tournament.start_date ? new Date(tournament.start_date).toLocaleDateString() : 'TBA'}
+                        {tournament.start_date ? new Date(tournament.start_date).toLocaleString() : 'TBA'}
                       </div>
                     </div>
 
@@ -331,7 +379,17 @@ export default function TournamentHub() {
                       ID: {tournament.tournament_id}
                     </div>
 
-                    {registered ? (
+                    {isHost ? (
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => navigate(createPageUrl(`Organiser?tournamentId=${tournament.id}`))}
+                        className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-400 to-pink-500 text-white font-bold flex items-center justify-center gap-2"
+                      >
+                        Open Organiser Panel
+                        <ArrowRight className="w-5 h-5" />
+                      </motion.button>
+                    ) : registered ? (
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
@@ -389,6 +447,64 @@ export default function TournamentHub() {
               className="w-full py-3 rounded-xl bg-gradient-to-r from-green-400 to-teal-500 text-white font-bold"
             >
               Join Tournament
+            </motion.button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Registration Modal */}
+      <Dialog open={showRegisterModal} onOpenChange={setShowRegisterModal}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Register for {selectedTournament?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {selectedTournament?.rules && (
+              <div className="clay-card p-3 max-h-40 overflow-auto text-sm text-gray-700">
+                <p className="font-semibold mb-1">Tournament Rules</p>
+                <p className="whitespace-pre-wrap">{selectedTournament.rules}</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-3">
+              <div>
+                <label className="text-sm font-semibold text-gray-700 mb-1 block">Full Name</label>
+                <Input
+                  type="text"
+                  placeholder="Your full name"
+                  value={regName}
+                  onChange={(e) => { setRegName(e.target.value); setRegisterError(''); }}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-gray-700 mb-1 block">Email</label>
+                <Input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={regEmail}
+                  onChange={(e) => { setRegEmail(e.target.value); setRegisterError(''); }}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Checkbox id="acceptRules" checked={acceptRules} onCheckedChange={(v) => { setAcceptRules(!!v); setRegisterError(''); }} />
+              <label htmlFor="acceptRules" className="text-sm text-gray-700 select-none">
+                I have read and agree to the tournament rules
+              </label>
+            </div>
+
+            {registerError && (
+              <p className="text-red-500 text-sm">{registerError}</p>
+            )}
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={submitRegistration}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold"
+            >
+              Confirm Registration
             </motion.button>
           </div>
         </DialogContent>
