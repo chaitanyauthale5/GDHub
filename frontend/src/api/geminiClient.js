@@ -182,6 +182,9 @@ export async function analyzeTranscript({ transcript, topic = 'General Practice'
                 clarityScore: 0,
                 vocabularyScore: 0,
                 confidenceScore: 0,
+                rawTranscript: '',
+                highlights: [],
+                highlightStats: { goodCount: 0, badCount: 0, categories: {} },
             };
         }
 
@@ -200,20 +203,31 @@ export async function analyzeTranscript({ transcript, topic = 'General Practice'
             if (gemini && typeof gemini === 'object') {
                 // Basic normalization and guardrails
                 const normalizeNum = (v, def = 0) => Number.isFinite(Number(v)) ? Math.max(0, Math.min(100, Math.round(Number(v)))) : def;
+                const userOnly = extractUserUtterances(text) || text;
+                const hl = buildInterviewHighlights(userOnly);
+                const hs = summarizeInterviewHighlights(hl);
+                const fluencyScore = normalizeNum(gemini.fluencyScore);
+                const clarityScore = normalizeNum(gemini.clarityScore);
+                const vocabularyScore = normalizeNum(gemini.vocabularyScore);
+                const confidenceScore = normalizeNum(gemini.confidenceScore);
+                const overallScore = computeCalibratedSpeakingOverall(fluencyScore, clarityScore, vocabularyScore, confidenceScore, hs);
                 return {
                     summary: gemini.summary || gemini.detailedFeedback || '',
                     strengths: Array.isArray(gemini.strengths) ? gemini.strengths : [],
                     improvements: Array.isArray(gemini.improvements) ? gemini.improvements : [],
                     suggestions: Array.isArray(gemini.practiceExercises) ? gemini.practiceExercises : (Array.isArray(gemini.suggestions) ? gemini.suggestions : []),
                     stats: gemini.stats || undefined,
-                    overallScore: normalizeNum(gemini.overallScore ?? gemini.overall_score),
-                    fluencyScore: normalizeNum(gemini.fluencyScore),
-                    clarityScore: normalizeNum(gemini.clarityScore),
-                    vocabularyScore: normalizeNum(gemini.vocabularyScore),
-                    confidenceScore: normalizeNum(gemini.confidenceScore),
+                    overallScore,
+                    fluencyScore,
+                    clarityScore,
+                    vocabularyScore,
+                    confidenceScore,
                     fillerWordsFound: Array.isArray(gemini.fillerWordsFound) ? gemini.fillerWordsFound : [],
                     detailedFeedback: gemini.detailedFeedback || '',
                     practiceExercises: Array.isArray(gemini.practiceExercises) ? gemini.practiceExercises : [],
+                    rawTranscript: userOnly,
+                    highlights: hl,
+                    highlightStats: hs,
                 };
             }
         }
@@ -280,7 +294,10 @@ export async function analyzeTranscript({ transcript, topic = 'General Practice'
         const clarityScore = clampScore(60 + (hasSignposts ? 15 : 0) + (hasClosure ? 10 : 0) + (hasExamples ? 10 : 0) - (avgSentenceLen > 28 ? 10 : 0) - (avgSentenceLen < 8 ? 10 : 0), 45, 98);
         const vocabularyScore = clampScore(50 + Math.min(uniqueWords.size, 150) * 0.3 + vocabRichness * 100 * 0.4, 45, 97);
         const confidenceScore = clampScore(55 + (assertivePhrases ? 12 : 0) - Math.min(fillerCount * 2, 30) + Math.min(words.length / 20, 25), 40, 96);
-        const overallScore = Math.round((fluencyScore + clarityScore + vocabularyScore + confidenceScore) / 4);
+
+        const hl = buildInterviewHighlights(userOnly);
+        const hs = summarizeInterviewHighlights(hl);
+        const overallScore = computeCalibratedSpeakingOverall(fluencyScore, clarityScore, vocabularyScore, confidenceScore, hs);
 
         return {
             summary,
@@ -302,6 +319,9 @@ export async function analyzeTranscript({ transcript, topic = 'General Practice'
             vocabularyScore,
             confidenceScore,
             fillerWordsFound,
+            rawTranscript: userOnly,
+            highlights: hl,
+            highlightStats: hs,
             detailedFeedback: buildDetailedFeedback({
                 summary,
                 strengths,
@@ -418,6 +438,18 @@ function computeCalibratedInterviewOverall(communication, confidence, content, h
     const good = Math.max(0, (highlightStats && highlightStats.goodCount) || 0);
     const bad = Math.max(0, (highlightStats && highlightStats.badCount) || 0);
     const adj = Math.max(-12, Math.min(8, good * 0.5 - bad * 1));
+    return clampScore(Math.round(base + adj), 0, 100);
+}
+
+function computeCalibratedSpeakingOverall(fluency, clarity, vocabulary, confidence, highlightStats) {
+    const wFluency = 0.30;
+    const wClarity = 0.35;
+    const wVocab = 0.20;
+    const wConf = 0.15;
+    const base = (fluency * wFluency) + (clarity * wClarity) + (vocabulary * wVocab) + (confidence * wConf);
+    const good = Math.max(0, (highlightStats && highlightStats.goodCount) || 0);
+    const bad = Math.max(0, (highlightStats && highlightStats.badCount) || 0);
+    const adj = Math.max(-10, Math.min(6, good * 0.3 - bad * 0.8));
     return clampScore(Math.round(base + adj), 0, 100);
 }
 
