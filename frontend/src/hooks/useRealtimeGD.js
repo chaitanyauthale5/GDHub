@@ -32,6 +32,7 @@ export default function useRealtimeGD({ enabled, roomId, user, stream, language 
   const recRef = useRef(null);
   const startedRef = useRef(false);
   const [metrics, setMetrics] = useState(null);
+  const dbg = typeof window !== 'undefined' && !!window.__gdDebug;
 
   // Subscribe to live metrics
   useEffect(() => {
@@ -53,11 +54,86 @@ export default function useRealtimeGD({ enabled, roomId, user, stream, language 
     if (!audioTracks || audioTracks.length === 0) return;
     const audioStream = new MediaStream([audioTracks[0]]);
 
-    let mimeType = 'audio/webm;codecs=opus';
-    if (!MediaRecorder.isTypeSupported(mimeType)) {
-      mimeType = 'audio/webm';
+    // Decide capture pathway
+    const preferOgg = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/ogg;codecs=opus');
+    const preferWebm = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm;codecs=opus');
+    const forcePCM = typeof window !== 'undefined' && !!window.__gdForcePCM;
+    const usePCM = forcePCM || !preferOgg;
+
+    const userId = user.email || user.id || 'user';
+    const userName = user.full_name || userId;
+
+    if (usePCM) {
+      // PCM Linear16 @16kHz using ScriptProcessorNode
+      const targetRate = 16000;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      const ctx = new AC();
+      let source, processor;
+      let leftover = new Float32Array(0);
+
+      const start = async () => {
+        if (startedRef.current) return;
+        startedRef.current = true;
+        try { source = ctx.createMediaStreamSource(audioStream); } catch { return; }
+        processor = ctx.createScriptProcessor(4096, 1, 1);
+        source.connect(processor);
+        processor.connect(ctx.destination);
+        try { socket.emit('gd_audio_start', { roomId, userId, userName, language, mimeType: 'audio/linear16;rate=16000' }); } catch {}
+        processor.onaudioprocess = (e) => {
+          try {
+            const input = e.inputBuffer.getChannelData(0);
+            const data = new Float32Array(leftover.length + input.length);
+            data.set(leftover, 0); data.set(input, leftover.length);
+            const ratio = (ctx.sampleRate || 48000) / targetRate;
+            const newLength = Math.floor(data.length / ratio);
+            if (newLength <= 0) { leftover = data; return; }
+            const down = new Float32Array(newLength);
+            let idx = 0; let i = 0;
+            while (idx < newLength) { down[idx++] = data[Math.floor(i)]; i += ratio; }
+            const consumed = Math.floor(newLength * ratio);
+            leftover = data.slice(consumed);
+            const pcmBuffer = new ArrayBuffer(down.length * 2);
+            const view = new DataView(pcmBuffer);
+            for (let j = 0; j < down.length; j++) {
+              let s = Math.max(-1, Math.min(1, down[j]));
+              view.setInt16(j * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+            if (dbg) console.log('[gd] chunk -> socket (pcm)', pcmBuffer.byteLength);
+            socket.emit('gd_audio_chunk', { roomId, userId, data: pcmBuffer });
+          } catch {}
+        };
+      };
+
+      const stop = () => {
+        try { processor && (processor.onaudioprocess = null); } catch {}
+        try { source && source.disconnect(); } catch {}
+        try { processor && processor.disconnect(); } catch {}
+        try { ctx && ctx.close && ctx.close(); } catch {}
+        try { socket.emit('gd_audio_stop', { roomId, userId }); } catch {}
+        recRef.current = null;
+        startedRef.current = false;
+        if (dbg) console.log('[gd] pcm stop');
+      };
+
+      recRef.current = { stop };
+      start();
+
+      const onReconnect = () => {
+        try {
+          if (startedRef.current) socket.emit('gd_audio_start', { roomId, userId, userName, language, mimeType: 'audio/linear16;rate=16000' });
+        } catch {}
+      };
+      socket.on('connect', onReconnect);
+
+      return () => {
+        stop();
+        try { socket.off('connect', onReconnect); } catch {}
+      };
     }
 
+    // MediaRecorder path (OGG/WebM Opus)
+    let mimeType = preferOgg ? 'audio/ogg;codecs=opus' : (preferWebm ? 'audio/webm;codecs=opus' : 'audio/webm');
     let mr;
     try {
       mr = new MediaRecorder(audioStream, { mimeType, audioBitsPerSecond: 128000 });
@@ -66,22 +142,18 @@ export default function useRealtimeGD({ enabled, roomId, user, stream, language 
     }
     if (!mr) return;
 
-    const userId = user.email || user.id || 'user';
-    const userName = user.full_name || userId;
-
     const start = () => {
       if (startedRef.current) return;
       startedRef.current = true;
-      try {
-        socket.emit('gd_audio_start', { roomId, userId, userName, language });
-      } catch {}
-      try { mr.start(300); } catch {}
+      try { socket.emit('gd_audio_start', { roomId, userId, userName, language, mimeType }); } catch {}
+      try { mr.start(250); if (dbg) console.log('[gd] mediarecorder start', mimeType); } catch {}
     };
 
     const onData = async (e) => {
       try {
         if (!e.data || e.data.size === 0) return;
         const ab = await e.data.arrayBuffer();
+        if (dbg) console.log('[gd] chunk -> socket', ab.byteLength);
         socket.emit('gd_audio_chunk', { roomId, userId, data: ab });
       } catch {}
     };
@@ -91,6 +163,7 @@ export default function useRealtimeGD({ enabled, roomId, user, stream, language 
       try { socket.emit('gd_audio_stop', { roomId, userId }); } catch {}
       recRef.current = null;
       startedRef.current = false;
+      if (dbg) console.log('[gd] mediarecorder stop');
     };
 
     mr.addEventListener('dataavailable', onData);
@@ -99,9 +172,20 @@ export default function useRealtimeGD({ enabled, roomId, user, stream, language 
     recRef.current = { mr, stop };
     start();
 
+    const onReconnect = () => {
+      try {
+        if (startedRef.current) {
+          socket.emit('gd_audio_start', { roomId, userId, userName, language, mimeType });
+          if (dbg) console.log('[gd] re-emit audio_start on reconnect');
+        }
+      } catch {}
+    };
+    socket.on('connect', onReconnect);
+
     return () => {
       try { mr.removeEventListener('dataavailable', onData); } catch {}
       stop();
+      try { socket.off('connect', onReconnect); } catch {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, socket, roomId, user?.email, user?.id, stream, language]);

@@ -1,7 +1,9 @@
 import AI3DAvatar from '@/components/shared/AI3DAvatar';
 import useZegoCall from '@/hooks/useZegoCall';
+import useRealtimeGD from '@/hooks/useRealtimeGD';
+import TranscriptionModal from '@/components/shared/TranscriptionModal';
 import { useAuth } from '@/lib/AuthContext';
-import { AlertCircle, ArrowLeft, Clock, Mic, MicOff, PhoneOff, Video, VideoOff } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Clock, Mic, MicOff, PhoneOff, Video, VideoOff, ScrollText } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
@@ -20,6 +22,8 @@ export default function Call() {
   const [room, setRoom] = useState(null);
   const [timeLeft, setTimeLeft] = useState(0);
   const didEndRef = useRef(false);
+  const [showTranscript, setShowTranscript] = useState(false);
+  const [dgLang, setDgLang] = useState('en-US');
 
   const [localVideoEl, setLocalVideoEl] = useState(null);
   const [remoteVideoEls, setRemoteVideoEls] = useState({}); // streamID -> video element
@@ -39,6 +43,10 @@ export default function Call() {
     isJoining,
     attachStreamToVideoElement,
   } = useZegoCall({ roomId, user, autoJoin: true });
+
+  // Start realtime transcription stream to backend and subscribe to metrics
+  const gdUser = user || (diagnostics?.userID ? { id: diagnostics.userID, email: diagnostics.userID, full_name: diagnostics.userID } : null);
+  useRealtimeGD({ enabled: !!roomId && !!localStream && !!gdUser, roomId, user: gdUser, stream: localStream, language: dgLang });
 
   useEffect(() => {
     let active = true;
@@ -185,6 +193,25 @@ export default function Call() {
           </div>
         </div>
 
+        {/* Transcription controls */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowTranscript(true)}
+            className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold"
+          >
+            Live Transcription
+          </button>
+          <select
+            value={dgLang}
+            onChange={(e) => setDgLang(e.target.value)}
+            className="px-3 py-2 rounded-xl bg-gray-700 text-white text-sm"
+          >
+            <option value="en-US">English (US)</option>
+            <option value="en-IN">English (IN)</option>
+            <option value="hi-IN">Hindi</option>
+          </select>
+        </div>
+
         <div className="text-right text-xs text-gray-300">
           <div>appID: {diagnostics.appID || '—'}</div>
           <div>userID: {diagnostics.userID || (user?.email || user?.id || '—')}</div>
@@ -278,6 +305,24 @@ export default function Call() {
           <span>End Call</span>
         </button>
       </div>
+
+      <div className="fixed right-3 top-24 z-40">
+        <button
+          onClick={() => setShowTranscript(true)}
+          className="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold flex items-center gap-2 shadow-lg"
+        >
+          <ScrollText className="w-4 h-4" />
+          Transcript
+        </button>
+      </div>
+
+      {/* Live Transcription Modal */}
+      <TranscriptionModal
+        open={showTranscript}
+        onOpenChange={setShowTranscript}
+        roomId={roomId}
+        participants={room?.participants || []}
+      />
     </div>
   );
 }

@@ -37,6 +37,8 @@ export const SocketProvider = ({ children }) => {
             if (user?.email) newSocket.emit('register_user', user.email);
         };
         newSocket.on('connect', onConnect);
+        newSocket.on('connect_error', (err) => { try { console.warn('Socket connect_error:', err && err.message ? err.message : err); } catch {} });
+        try { globalThis.__appSocket = newSocket; } catch {}
 
         return () => {
             try { newSocket.off('connect', onConnect); } catch {}
