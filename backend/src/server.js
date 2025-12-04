@@ -25,12 +25,14 @@ const ExtemporeSession = require('./models/ExtemporeSession');
 const AIInterview = require('./models/AIInterview');
 const ChatMessage = require('./models/ChatMessage');
 const ExtemporeTopic = require('./models/ExtemporeTopic');
+const ExtemporeMessage = require('./models/ExtemporeMessage');
 const SoloPracticeSession = require('./models/SoloPracticeSession');
 const AIInterviewSession = require('./models/AIInterviewSession');
 
 const authRoutes = require('./routes/auth');
 const tokenRoutes = require('./routes/token');
 const globalGdRoutes = require('./routes/globalGd');
+const extemporeGeminiRoutes = require('./routes/extemporeGemini');
 const auth = require('./middleware/auth');
 
 const app = express();
@@ -55,6 +57,7 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/global-gd', globalGdRoutes);
+app.use('/api/extempore', extemporeGeminiRoutes);
 
 app.use('/api/users', createCrudRouter(User));
 app.use('/api/user-profiles', createCrudRouter(UserProfile));
@@ -70,6 +73,7 @@ app.use('/api/extempore-sessions', createCrudRouter(ExtemporeSession));
 app.use('/api/ai-interviews', createCrudRouter(AIInterview));
 app.use('/api/chat-messages', createCrudRouter(ChatMessage));
 app.use('/api/extempore-topics', createCrudRouter(ExtemporeTopic));
+app.use('/api/extempore-messages', createCrudRouter(ExtemporeMessage));
 app.use('/api/solo-practice-sessions', createCrudRouter(SoloPracticeSession));
 app.use('/api/zego', tokenRoutes);
 app.use('/api/ai-interview-sessions', createCrudRouter(AIInterviewSession));

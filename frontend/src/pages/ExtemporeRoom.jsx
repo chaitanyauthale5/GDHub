@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { createPageUrl } from '../utils';
 import { api } from '@/api/apiClient';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Clock, Mic, MicOff, Camera, VideoOff, Play, Square } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Camera, Mic, MicOff, Play, Square, VideoOff } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ClayCard from '../components/shared/ClayCard';
+import { createPageUrl } from '../utils';
 
 export default function ExtemporeRoom() {
   const navigate = useNavigate();
@@ -14,6 +14,9 @@ export default function ExtemporeRoom() {
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
   const [topic, setTopic] = useState('');
+  const [transcript, setTranscript] = useState('');
+  const [interim, setInterim] = useState('');
+  const recogRef = useRef(null);
 
   const urlParams = new URLSearchParams(window.location.search);
   const topicParam = urlParams.get('topic');
@@ -51,26 +54,77 @@ export default function ExtemporeRoom() {
     return () => clearInterval(interval);
   }, [timer, phase]);
 
+  useEffect(() => {
+    if (phase !== 'speaking' || !micOn) {
+      try { recogRef.current && recogRef.current.stop(); } catch {}
+      recogRef.current = null;
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const rec = new SpeechRecognition();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'en-US';
+
+    rec.onresult = (event) => {
+      let latestInterim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const res = event.results[i];
+        const text = res[0]?.transcript?.trim();
+        if (!text) continue;
+        if (res.isFinal) {
+          setTranscript((prev) => (prev ? `${prev} ${text}` : text));
+          latestInterim = '';
+        } else {
+          latestInterim = text;
+        }
+      }
+      setInterim(latestInterim);
+    };
+
+    rec.onerror = () => { try { rec.stop(); } catch {} };
+
+    try { rec.start(); } catch {}
+    recogRef.current = rec;
+    setIsRecording(true);
+
+    return () => {
+      try { rec.stop(); } catch {}
+      recogRef.current = null;
+      setIsRecording(false);
+    };
+  }, [phase, micOn]);
+
   const handleComplete = async () => {
     try {
       const user = await api.auth.me();
+      const uid = (user && (user.id || user.email)) || 'guest';
+      try { recogRef.current && recogRef.current.stop(); } catch {}
+      const finalTranscript = (transcript + (interim ? ` ${interim}` : '')).trim();
       const session = await api.entities.ExtemporeSession.create({
-        user_id: user.id,
+        user_id: uid,
         topic: topic,
         difficulty: 'medium',
         category: 'General',
         prep_time: 30,
         speaking_duration: 300 - timer,
-        fluency_score: Math.floor(Math.random() * 3 + 7),
-        clarity_score: Math.floor(Math.random() * 3 + 7),
-        pacing_score: Math.floor(Math.random() * 4 + 6),
-        filler_words_count: Math.floor(Math.random() * 10),
-        filler_words: ['uh', 'like', 'you know', 'actually'],
-        strengths: ['Strong understanding of the topic', 'Engaging delivery style', 'Effective use of examples'],
-        improvements: ['Reduce the use of filler words', 'Improve transitions between points', 'Practice pacing to maintain audience engagement'],
-        transcript: 'This is a simulated transcript of the speech...',
-        ai_feedback: 'Overall, the speech effectively presents the impact of artificial intelligence on employment but could benefit from more structured points.'
+        fluency_score: 0,
+        clarity_score: 0,
+        pacing_score: 0,
+        filler_words_count: 0,
+        filler_words: [],
+        strengths: [],
+        improvements: [],
+        transcript: finalTranscript,
+        ai_feedback: ''
       });
+
+      try {
+        await api.entities.ExtemporeMessage.create({ session_id: session.id, user_id: uid, text: finalTranscript });
+      } catch {}
 
       navigate(createPageUrl(`ExtemporeAnalysis?sessionId=${session.id}`));
     } catch (error) {
@@ -174,7 +228,6 @@ export default function ExtemporeRoom() {
                   <p className="text-xl font-bold gradient-text">{topic}</p>
                 </ClayCard>
 
-                {/* Recording Indicator */}
                 {isRecording && (
                   <motion.div
                     animate={{ opacity: [1, 0.5, 1] }}
@@ -185,6 +238,11 @@ export default function ExtemporeRoom() {
                     <span className="text-white font-semibold">Recording...</span>
                   </motion.div>
                 )}
+
+                <ClayCard className="mb-6 text-left max-h-48 overflow-y-auto">
+                  <p className="text-sm text-gray-600">Live Transcript</p>
+                  <p className="mt-2 whitespace-pre-wrap break-words text-gray-800">{(transcript + (interim ? ` ${interim}` : '')).trim() || '...'}</p>
+                </ClayCard>
 
                 {/* Controls */}
                 <div className="flex justify-center gap-4 mb-6">
