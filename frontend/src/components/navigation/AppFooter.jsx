@@ -38,18 +38,38 @@ export default function AppFooter() {
     };
   }, [location.pathname]);
 
-  if (shouldHide || !atBottom) return null;
+  const isAbout = p === '/about';
+  const showFooter = !shouldHide && atBottom;
 
   return (
-    <footer className="bg-white border-t border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between text-sm text-gray-600">
-        <div className="font-semibold"> {new Date().getFullYear()} SpeakUp</div>
-        <div className="flex items-center gap-4">
-          <Link to={createPageUrl('Terms')} className="hover:text-gray-900">Terms</Link>
-          <Link to={createPageUrl('Privacy')} className="hover:text-gray-900">Privacy</Link>
-          <Link to={createPageUrl('Contact')} className="hover:text-gray-900">Contact</Link>
-        </div>
-      </div>
-    </footer>
+    <>
+      {isAbout && (
+        <section className="mt-12">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="rounded-3xl border-2 border-indigo-100 bg-gradient-to-br from-gray-50 to-indigo-50 p-6 sm:p-8">
+              <h2 className="text-2xl font-black mb-2">Contact Us</h2>
+              <p className="text-gray-700 mb-2">We'd love to hear from you.</p>
+              <div className="space-y-1 text-sm text-gray-600">
+                <p>Email: support@gdhub.app</p>
+                <p>Twitter/X: @gdhub</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {showFooter && (
+        <footer className="bg-white border-t border-gray-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between text-sm text-gray-600">
+            <div className="font-semibold"> {new Date().getFullYear()} SpeakUp</div>
+            <div className="flex items-center gap-4">
+              <Link to={createPageUrl('Terms')} className="hover:text-gray-900">Terms</Link>
+              <Link to={createPageUrl('Privacy')} className="hover:text-gray-900">Privacy</Link>
+              <Link to={createPageUrl('Contact')} className="hover:text-gray-900">Contact</Link>
+            </div>
+          </div>
+        </footer>
+      )}
+    </>
   );
 }

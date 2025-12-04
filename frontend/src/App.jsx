@@ -66,8 +66,8 @@ const AuthenticatedApp = () => {
   return (
     <Routes>
       <Route path="/" element={
-        <LayoutWrapper currentPageName={mainPageKey}>
-          <MainPage />
+        <LayoutWrapper currentPageName={isAuthenticated ? 'Dashboard' : mainPageKey}>
+          {isAuthenticated ? <pagesConfig.Pages.Dashboard /> : <MainPage />}
         </LayoutWrapper>
       } />
       <Route
