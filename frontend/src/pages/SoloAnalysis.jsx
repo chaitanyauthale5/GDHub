@@ -1,4 +1,4 @@
-import { api } from '@/api/apiClient';
+import { analyzeTranscript } from '@/api/geminiClient';
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { createPageUrl } from '../utils';
@@ -65,43 +65,11 @@ export default function SoloAnalysis() {
 
   const generateAnalysis = async (topicData, messagesData) => {
     try {
-      const userMessages = messagesData.filter(m => m.role === 'user').map(m => m.content).join(' ');
-      
-      const response = await api.integrations.Core.InvokeLLM({
-        prompt: `Analyze this solo speaking practice session and provide detailed feedback:
-
-Topic: ${topicData}
-User's responses: ${userMessages}
-Number of exchanges: ${messagesData.length / 2}
-
-Generate a comprehensive speaking analysis in JSON format with:
-1. overallScore: A score out of 100
-2. fluencyScore: Score for speaking fluency (out of 100)
-3. clarityScore: Score for clarity and coherence (out of 100)
-4. vocabularyScore: Score for vocabulary usage (out of 100)
-5. confidenceScore: Estimated confidence level (out of 100)
-6. strengths: Array of 3-4 things the user did well
-7. improvements: Array of 3-4 areas to improve
-8. fillerWordsFound: Array of any filler words detected (um, uh, like, you know)
-9. detailedFeedback: A paragraph of personalized feedback
-10. practiceExercises: Array of 3 specific exercises to improve`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            overallScore: { type: "number" },
-            fluencyScore: { type: "number" },
-            clarityScore: { type: "number" },
-            vocabularyScore: { type: "number" },
-            confidenceScore: { type: "number" },
-            strengths: { type: "array", items: { type: "string" } },
-            improvements: { type: "array", items: { type: "string" } },
-            fillerWordsFound: { type: "array", items: { type: "string" } },
-            detailedFeedback: { type: "string" },
-            practiceExercises: { type: "array", items: { type: "string" } }
-          }
-        }
-      });
-      setAnalysis(response);
+      const transcriptText = messagesData
+        .map(m => `${m.role === 'ai' ? 'AI Coach' : 'You'}: ${m.content}`)
+        .join('\n');
+      const result = await analyzeTranscript({ transcript: transcriptText, topic: topicData || 'General Practice' });
+      setAnalysis(result);
     } catch (error) {
       console.error('Error generating analysis:', error);
     }
@@ -129,6 +97,40 @@ Generate a comprehensive speaking analysis in JSON format with:
       <p className="text-xs sm:text-sm font-medium text-gray-600">{label}</p>
     </div>
   );
+
+  const renderHighlightedTranscript = () => {
+    const text = String(analysis?.rawTranscript || '');
+    const spans = Array.isArray(analysis?.highlights) ? [...analysis.highlights].sort((a, b) => a.start - b.start) : [];
+    let i = 0;
+    const out = [];
+    for (let idx = 0; idx < spans.length; idx++) {
+      const h = spans[idx];
+      const start = Math.max(0, Math.min(text.length, Number(h.start) || 0));
+      const end = Math.max(start, Math.min(text.length, Number(h.end) || start));
+      if (start > i) out.push(text.slice(i, start));
+      const cls = h.label === 'bad' ? 'bg-red-50 text-red-700 rounded px-0.5' : 'bg-green-50 text-green-700 rounded px-0.5';
+      const tip = h?.suggestion ? `${h.reason || h.label}. ${h.label === 'bad' ? 'Try: ' : 'Keep: '}${h.suggestion}` : (h.reason || h.label);
+      out.push(
+        <span key={`s-ihl-${idx}`} className={cls} title={tip}>
+          {text.slice(start, end)}
+        </span>
+      );
+      i = end;
+    }
+    if (i < text.length) out.push(text.slice(i));
+    return out.length ? out : text;
+  };
+
+  const compileHighlightSuggestions = () => {
+    const out = [];
+    const seen = new Set();
+    for (const h of (analysis?.highlights || [])) {
+      if (!h?.suggestion) continue;
+      const line = (h.label === 'bad' ? `Try: ${h.suggestion}` : `Keep: ${h.suggestion}`);
+      if (!seen.has(line)) { seen.add(line); out.push(line); }
+    }
+    return out.slice(0, 8);
+  };
 
   if (loading) {
     return (
@@ -180,6 +182,63 @@ Generate a comprehensive speaking analysis in JSON format with:
               <div className="text-7xl font-black mb-2">{analysis.overallScore}</div>
               <p className="text-lg opacity-90">out of 100</p>
             </motion.div>
+
+            {/* Transcript with Highlights */}
+            {analysis?.rawTranscript && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.34 }}
+                className="bg-white rounded-3xl p-6 shadow-xl border-2 border-gray-100 mb-6"
+              >
+                <h2 className="font-bold text-lg mb-2">Transcript with Highlights</h2>
+                <div className="text-xs text-gray-500 mb-3">Green = good • Red = needs improvement</div>
+                <div className="whitespace-pre-wrap break-words leading-relaxed text-gray-800">{renderHighlightedTranscript()}</div>
+                {analysis?.highlightStats && (
+                  <div className="mt-3 text-sm text-gray-600 flex gap-6">
+                    <div className="flex items-center gap-2"><span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span><span>{analysis.highlightStats.goodCount} good</span></div>
+                    <div className="flex items-center gap-2"><span className="inline-block w-2 h-2 bg-red-500 rounded-full"></span><span>{analysis.highlightStats.badCount} issues</span></div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {/* Highlight Details & Suggestions */}
+            {Array.isArray(analysis?.highlights) && analysis.highlights.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.37 }}
+                className="bg-white rounded-3xl p-6 shadow-xl border-2 border-gray-100 mb-6"
+              >
+                <h2 className="font-bold text-lg mb-3">Highlight Details & Suggestions</h2>
+                <ul className="space-y-3">
+                  {analysis.highlights.map((h, idx) => {
+                    const text = String(analysis?.rawTranscript || '');
+                    const start = Math.max(0, Math.min(text.length, Number(h.start) || 0));
+                    const end = Math.max(start, Math.min(text.length, Number(h.end) || start));
+                    const phrase = text.slice(start, end);
+                    const isBad = h.label === 'bad';
+                    return (
+                      <li key={`s-hld-${idx}`} className="flex items-start gap-3">
+                        <span className={`mt-1 inline-block w-2 h-2 rounded-full ${isBad ? 'bg-red-500' : 'bg-green-500'}`}></span>
+                        <div className="flex-1">
+                          <div className="text-sm">
+                            <span className="font-mono bg-gray-100 rounded px-1 py-0.5">{phrase || '(empty)'}</span>
+                            {h.pointAction && (
+                              <span className={`ml-2 text-xs rounded-full px-2 py-0.5 ${h.pointAction === 'cut' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                                {h.pointAction === 'cut' ? 'Point cut' : 'Point added'}
+                              </span>
+                            )}
+                          </div>
+                          {h.reason && <div className="text-xs text-gray-500 mt-0.5">{h.reason}</div>}
+                          {h.suggestion && (
+                            <div className="text-sm mt-1">
+                              {isBad ? 'Try: ' : 'Keep: '}
+                              {h.suggestion}
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </motion.div>
+            )}
 
             {/* Score Breakdown */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}

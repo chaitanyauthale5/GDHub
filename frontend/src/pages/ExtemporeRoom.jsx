@@ -12,11 +12,25 @@ export default function ExtemporeRoom() {
   const [timer, setTimer] = useState(30);
   const [isRecording, setIsRecording] = useState(false);
   const [micOn, setMicOn] = useState(true);
-  const [cameraOn, setCameraOn] = useState(true);
+  const [cameraOn, setCameraOn] = useState(false);
   const [topic, setTopic] = useState('');
   const [transcript, setTranscript] = useState('');
   const [interim, setInterim] = useState('');
   const recogRef = useRef(null);
+  const videoRef = useRef(null);
+  const cameraStreamRef = useRef(null);
+
+  const stopCamera = () => {
+    try {
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach((track) => track.stop());
+        cameraStreamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    } catch {}
+  };
 
   const urlParams = new URLSearchParams(window.location.search);
   const topicParam = urlParams.get('topic');
@@ -97,6 +111,41 @@ export default function ExtemporeRoom() {
       setIsRecording(false);
     };
   }, [phase, micOn]);
+
+  useEffect(() => {
+    if (phase !== 'speaking' || !cameraOn) {
+      stopCamera();
+      return;
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return;
+    }
+
+    let active = true;
+
+    navigator.mediaDevices
+      .getUserMedia({ video: true, audio: false })
+      .then((stream) => {
+        if (!active) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        cameraStreamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      })
+      .catch((err) => {
+        console.error('Unable to access camera', err);
+        stopCamera();
+      });
+
+    return () => {
+      active = false;
+      stopCamera();
+    };
+  }, [cameraOn, phase]);
 
   const handleComplete = async () => {
     try {
@@ -228,21 +277,31 @@ export default function ExtemporeRoom() {
                   <p className="text-xl font-bold gradient-text">{topic}</p>
                 </ClayCard>
 
-                {isRecording && (
-                  <motion.div
-                    animate={{ opacity: [1, 0.5, 1] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                    className="flex items-center justify-center gap-2 mb-6"
-                  >
-                    <div className="w-4 h-4 bg-red-500 rounded-full"></div>
-                    <span className="text-white font-semibold">Recording...</span>
-                  </motion.div>
-                )}
+                <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+                  <ClayCard className="h-80 flex flex-col items-center justify-center bg-black/40">
+                    {cameraOn ? (
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        muted
+                        playsInline
+                        className="w-full rounded-2xl bg-black"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-300 text-sm">
+                        <Camera className="w-5 h-5 mr-2" />
+                        <span>Camera is off</span>
+                      </div>
+                    )}
+                  </ClayCard>
 
-                <ClayCard className="mb-6 text-left max-h-48 overflow-y-auto">
-                  <p className="text-sm text-gray-600">Live Transcript</p>
-                  <p className="mt-2 whitespace-pre-wrap break-words text-gray-800">{(transcript + (interim ? ` ${interim}` : '')).trim() || '...'}</p>
-                </ClayCard>
+                  <ClayCard className="h-80 text-left overflow-y-auto flex flex-col">
+                    <p className="text-sm text-gray-600 mb-2">Live Transcript</p>
+                    <p className="whitespace-pre-wrap break-words text-gray-800 flex-1">
+                      {(transcript + (interim ? ` ${interim}` : '')).trim() || '...'}
+                    </p>
+                  </ClayCard>
+                </div>
 
                 {/* Controls */}
                 <div className="flex justify-center gap-4 mb-6">

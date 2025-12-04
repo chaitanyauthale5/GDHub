@@ -15,6 +15,8 @@ const GDRoomSchema = new mongoose.Schema({
     duration: { type: Number, default: 15 },
     topic: { type: String },
     participants: { type: [ParticipantSchema], default: [] },
+    // Users who explicitly left the room (used by global GD to avoid reusing old rooms)
+    leftUsers: { type: [String], default: [] },
     status: { type: String, enum: ['lobby', 'active', 'completed'], default: 'lobby' },
     started_at: { type: Date },
     locked: { type: Boolean, default: false },
