@@ -521,6 +521,8 @@ app.use((err, req, res, next) => {
 const http = require('http');
 const { Server } = require('socket.io');
 
+const { createDeepgramSession } = require('./services/deepgramRealtime');
+
 const start = async () => {
     await connectDB(config.mongoUri);
 
@@ -535,6 +537,8 @@ const start = async () => {
 
     io.on('connection', (socket) => {
         console.log('User connected:', socket.id);
+        // Track Deepgram sessions per socket
+        const dgSessions = new Map(); // key: `${roomId}:${userId}` -> session
 
         socket.on('join_room', (room) => {
             socket.join(room);
@@ -575,6 +579,60 @@ const start = async () => {
             const toRoom = `user:${to_user_id}`;
             io.to(fromRoom).emit('message_read', payload);
             io.to(toRoom).emit('message_read', payload);
+        });
+
+        // ==== GD Realtime Audio → Deepgram ====
+        socket.on('gd_audio_start', async (payload = {}) => {
+            try {
+                const { roomId, userId, userName, language } = payload;
+                if (!roomId || !userId) return;
+                const key = `${roomId}:${userId}`;
+                if (dgSessions.has(key)) return;
+                let topic;
+                try { const r = await GDRoom.findById(roomId); topic = r?.topic; } catch {}
+                const session = createDeepgramSession({ io, roomId, userId, userName, language, topic });
+                dgSessions.set(key, session);
+                socket.join(`gd:${roomId}`);
+            } catch (e) {
+            }
+        });
+
+        socket.on('gd_audio_chunk', (payload = {}) => {
+            try {
+                const { roomId, userId, data } = payload;
+                if (!roomId || !userId || data === undefined || data === null) return;
+                const key = `${roomId}:${userId}`;
+                const session = dgSessions.get(key);
+                if (!session) return;
+                // socket.io may deliver Buffer, ArrayBuffer, or Uint8Array
+                let buf;
+                if (Buffer.isBuffer(data)) buf = data;
+                else if (data?.buffer) buf = Buffer.from(data.buffer);
+                else buf = Buffer.from(data);
+                session.send(buf);
+            } catch {}
+        });
+
+        socket.on('gd_audio_stop', (payload = {}) => {
+            try {
+                const { roomId, userId } = payload;
+                if (!roomId || !userId) return;
+                const key = `${roomId}:${userId}`;
+                const session = dgSessions.get(key);
+                if (session) {
+                    try { session.close(); } catch {}
+                    dgSessions.delete(key);
+                }
+            } catch {}
+        });
+
+        socket.on('disconnect', () => {
+            try {
+                for (const [, s] of dgSessions) {
+                    try { s.close(); } catch {}
+                }
+                dgSessions.clear();
+            } catch {}
         });
     });
 
