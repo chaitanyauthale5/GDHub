@@ -33,6 +33,7 @@ const authRoutes = require('./routes/auth');
 const tokenRoutes = require('./routes/token');
 const globalGdRoutes = require('./routes/globalGd');
 const extemporeGeminiRoutes = require('./routes/extemporeGemini');
+const aiAnalysisRoutes = require('./routes/aiAnalysis');
 const auth = require('./middleware/auth');
 
 const app = express();
@@ -58,6 +59,7 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/global-gd', globalGdRoutes);
 app.use('/api/extempore', extemporeGeminiRoutes);
+app.use('/api/ai-analysis', aiAnalysisRoutes);
 
 app.use('/api/users', createCrudRouter(User));
 app.use('/api/user-profiles', createCrudRouter(UserProfile));
@@ -589,7 +591,7 @@ const start = async () => {
                 const key = `${roomId}:${userId}`;
                 if (dgSessions.has(key)) return;
                 let topic;
-                try { const r = await GDRoom.findById(roomId); topic = r?.topic; } catch {}
+                try { const r = await GDRoom.findById(roomId); topic = r?.topic; } catch { }
                 // Always use Flux (v2). Map mimeType -> encoding
                 const mt = String(mimeType || '').toLowerCase();
                 let version = 'v2';
@@ -623,7 +625,7 @@ const start = async () => {
                 if (buf && buf.length) {
                     if (Math.random() < 0.02) console.log(`[gd] chunk ${roomId}/${userId} bytes=${buf.length}`);
                 }
-            } catch {}
+            } catch { }
         });
 
         socket.on('gd_audio_stop', (payload = {}) => {
@@ -633,20 +635,20 @@ const start = async () => {
                 const key = `${roomId}:${userId}`;
                 const session = dgSessions.get(key);
                 if (session) {
-                    try { session.close(); } catch {}
+                    try { session.close(); } catch { }
                     dgSessions.delete(key);
                 }
                 console.log(`[gd] audio_stop room=${roomId} user=${userId}`);
-            } catch {}
+            } catch { }
         });
 
         socket.on('disconnect', () => {
             try {
                 for (const [, s] of dgSessions) {
-                    try { s.close(); } catch {}
+                    try { s.close(); } catch { }
                 }
                 dgSessions.clear();
-            } catch {}
+            } catch { }
         });
     });
 

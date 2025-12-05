@@ -13,16 +13,16 @@ export default function GDAnalysis() {
   const [analysis, setAnalysis] = useState(null);
   const [perUser, setPerUser] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState(/** @type {string} */ ('feedback'));
+  const [activeTab, setActiveTab] = useState(/** @type {string} */('feedback'));
   const [analysisMode, setAnalysisMode] = useState(() => {
     const sp = new URLSearchParams(window.location.search);
     const raw = (sp.get('analysis') || localStorage.getItem('gd_analysis_mode') || 'dummy').toLowerCase();
-    return raw === 'original' ? 'original' : 'dummy';
+    return ['original', 'ai'].includes(raw) ? raw : 'dummy';
   });
 
   // persist mode and update URL param for shareability
   useEffect(() => {
-    try { localStorage.setItem('gd_analysis_mode', analysisMode); } catch {}
+    try { localStorage.setItem('gd_analysis_mode', analysisMode); } catch { }
     const sp = new URLSearchParams(window.location.search);
     sp.set('analysis', analysisMode);
     const qs = sp.toString();
@@ -109,16 +109,16 @@ export default function GDAnalysis() {
   };
 
   const tokenize = (s) => (String(s || '').toLowerCase().match(/[a-z']+/g) || []);
-  const fillerList = new Set(['um','uh','erm','hmm','like','actually','basically','literally']);
+  const fillerList = new Set(['um', 'uh', 'erm', 'hmm', 'like', 'actually', 'basically', 'literally']);
   const collabRegs = [/\bi agree\b/g, /building on/g, /adding to/g, /as [a-z]+ said/g, /good point/g, /what do you think/g, /let's/g, /we should/g, /we could/g, /together/g, /as a group/g, /can someone/g, /want to hear/g];
   const leaderRegs = [/we should/g, /we need/g, /to summarize/g, /summary/g, /next steps/g, /time check/g, /back to the topic/g, /let's/g, /agenda/g];
-  const posWords = new Set(['great','good','thanks','interesting','love','nice','clear','well','agree','appreciate','helpful']);
-  const negWords = new Set(['bad','terrible','hate','awful','confusing','unclear','disagree']);
+  const posWords = new Set(['great', 'good', 'thanks', 'interesting', 'love', 'nice', 'clear', 'well', 'agree', 'appreciate', 'helpful']);
+  const negWords = new Set(['bad', 'terrible', 'hate', 'awful', 'confusing', 'unclear', 'disagree']);
   const onTopicScoreLocal = (text, topic) => {
     const s = String(text || '').toLowerCase();
     const t = String(topic || '').toLowerCase();
     if (!t.trim()) return 0.5;
-    const stop = new Set(['is','the','a','an','of','and','or','to','in','on','for','with','without','are','do','does','did','be','being','been','at','by','from','it','that']);
+    const stop = new Set(['is', 'the', 'a', 'an', 'of', 'and', 'or', 'to', 'in', 'on', 'for', 'with', 'without', 'are', 'do', 'does', 'did', 'be', 'being', 'been', 'at', 'by', 'from', 'it', 'that']);
     const toks = Array.from(new Set((t.match(/[a-z']+/g) || []).filter(x => !stop.has(x))));
     if (toks.length === 0) return 0.5;
     let hit = 0; for (const tok of toks) if (s.includes(tok)) hit++;
@@ -133,7 +133,7 @@ export default function GDAnalysis() {
   };
   const clamp01 = (x) => Math.max(0, Math.min(1, x));
   const computeGroupMetrics = (transcripts = [], participants = [], topic = '') => {
-    const sorted = [...transcripts].sort((a,b) => (a.start_ms||0) - (b.start_ms||0));
+    const sorted = [...transcripts].sort((a, b) => (a.start_ms || 0) - (b.start_ms || 0));
     const byUser = new Map();
     let lastEnd = 0, lastSpeaker = null;
     for (const t of sorted) {
@@ -144,9 +144,9 @@ export default function GDAnalysis() {
       const tokens = tokenize(t.text);
       const words = tokens.length;
       let fillers = 0; for (const tok of tokens) if (fillerList.has(tok)) fillers++;
-      let collab = 0; for (const r of collabRegs) { const m = String(t.text||'').toLowerCase().match(r); if (m) collab += m.length; }
-      let lead = 0; for (const r of leaderRegs) { const m = String(t.text||'').toLowerCase().match(r); if (m) lead += m.length; }
-      let pos=0, neg=0; for (const tok of tokens) { if (posWords.has(tok)) pos++; else if (negWords.has(tok)) neg++; }
+      let collab = 0; for (const r of collabRegs) { const m = String(t.text || '').toLowerCase().match(r); if (m) collab += m.length; }
+      let lead = 0; for (const r of leaderRegs) { const m = String(t.text || '').toLowerCase().match(r); if (m) lead += m.length; }
+      let pos = 0, neg = 0; for (const tok of tokens) { if (posWords.has(tok)) pos++; else if (negWords.has(tok)) neg++; }
       const sentiment = clamp01((pos - neg) / Math.max(1, words) + 0.5);
       const u0 = byUser.get(uid) || { userId: uid, name, talkMs: 0, turns: 0, words: 0, fillers: 0, interruptions: 0, sentimentSum: 0, onTopicSum: 0, collabCues: 0, leadershipCues: 0, wpmSum: 0, wpmCount: 0 };
       const wpm = Math.max(0, Math.round(words / (durMs / 60000)) || 0);
@@ -225,25 +225,36 @@ export default function GDAnalysis() {
         const group = computeGroupMetrics(transcripts, sessionData.participants || [], sessionData.topic || '');
         let strengths = [];
         let improvements = [];
+        let aiScores = null;
         try {
-          const combined = (transcripts || []).sort((a,b)=> (a.start_ms||0)-(b.start_ms||0)).map(t=> `${t.user_name || t.user_id || 'Participant'}: ${t.text}`).join('\n');
+          const combined = (transcripts || []).sort((a, b) => (a.start_ms || 0) - (b.start_ms || 0)).map(t => `${t.user_name || t.user_id || 'Participant'}: ${t.text}`).join('\n');
           if (combined) {
             const gemini = await analyzeTranscript({ transcript: combined, topic: sessionData.topic || 'Group Discussion' });
             if (gemini && typeof gemini === 'object') {
               strengths = Array.isArray(gemini.strengths) ? gemini.strengths : strengths;
               improvements = Array.isArray(gemini.improvements) ? gemini.improvements : improvements;
+              if (analysisMode === 'ai') {
+                aiScores = {
+                  overallScore: gemini.overallScore || 0,
+                  participationScore: gemini.confidenceScore || 0,
+                  communicationScore: gemini.clarityScore || 0,
+                  knowledgeScore: gemini.vocabularyScore || 0,
+                  teamworkScore: gemini.fluencyScore || 0,
+                };
+              }
             }
           }
-        } catch {}
+        } catch { }
+        const finalScores = aiScores || group;
         setAnalysis({
-          overallScore: group.overallScore,
-          participationScore: group.participationScore,
-          communicationScore: group.communicationScore,
-          knowledgeScore: group.knowledgeScore,
-          teamworkScore: group.teamworkScore,
+          overallScore: finalScores.overallScore,
+          participationScore: finalScores.participationScore,
+          communicationScore: finalScores.communicationScore,
+          knowledgeScore: finalScores.knowledgeScore,
+          teamworkScore: finalScores.teamworkScore,
           strengths: strengths.length ? strengths : ['Balanced participation from most members', 'Good collaboration cues observed', 'Positive tone maintained'],
           improvements: improvements.length ? improvements : ['Reduce filler words', 'Stay on-topic consistently', 'Aim for balanced speaking time'],
-          detailedFeedback: 'Scores are computed from real-time metrics like talk-time, turns, WPM, filler usage, on-topic focus, collaboration and leadership cues.',
+          detailedFeedback: aiScores ? 'Analysis generated by AI based on the full session transcript.' : 'Scores are computed from real-time metrics like talk-time, turns, WPM, filler usage, on-topic focus, collaboration and leadership cues.',
           tips: ['Aim for steady 110–160 WPM', 'Use fewer filler words', 'Invite quieter members and summarize transitions'],
         });
         return;
@@ -352,9 +363,9 @@ Generate a comprehensive analysis in JSON format with:
             overallScore: u.overallScore,
             communicationScore: u.communication,
             knowledgeScore: u.knowledge,
-            participationSummary: `Spoke for ${talkTimeSec}s with ${u.turns} turns, avg ${u.wpmAvg} WPM. On-topic ${(Math.round((u.onTopicAvg || 0)*100))}%, fillers ${(Math.round((u.fillerRate || 0)*100))}/100w.`,
-            strengths: [u.leadershipCues>0?'Showed leadership':'Positive tone', u.collabCues>0?'Built on peers':'Clear points', (u.onTopicAvg||0)>0.6?'Stayed on-topic':'Good participation'],
-            improvements: [(u.fillerRate||0)>0.05?'Reduce fillers':'Add examples', (u.wpmAvg||0)>170?'Slow down':'Summarize more', u.interruptions>0?'Fewer interruptions':'Invite others'],
+            participationSummary: `Spoke for ${talkTimeSec}s with ${u.turns} turns, avg ${u.wpmAvg} WPM. On-topic ${(Math.round((u.onTopicAvg || 0) * 100))}%, fillers ${(Math.round((u.fillerRate || 0) * 100))}/100w.`,
+            strengths: [u.leadershipCues > 0 ? 'Showed leadership' : 'Positive tone', u.collabCues > 0 ? 'Built on peers' : 'Clear points', (u.onTopicAvg || 0) > 0.6 ? 'Stayed on-topic' : 'Good participation'],
+            improvements: [(u.fillerRate || 0) > 0.05 ? 'Reduce fillers' : 'Add examples', (u.wpmAvg || 0) > 170 ? 'Slow down' : 'Summarize more', u.interruptions > 0 ? 'Fewer interruptions' : 'Invite others'],
           } : {
             overallScore: 0,
             communicationScore: 0,
@@ -375,14 +386,30 @@ Generate a comprehensive analysis in JSON format with:
           let ai = null;
           if (text) {
             try {
-              const gemini = await analyzeTranscript({ transcript: text, topic: sessionData.topic || 'Group Discussion' });
+              let gemini = null;
+              if (analysisMode === 'ai') {
+                gemini = await api.aiAnalysis.analyzeGDParticipant({
+                  topic: sessionData.topic || 'Group Discussion',
+                  transcript: text,
+                  durationSec: Math.max(5, Math.round(totalMs / 1000))
+                });
+              } else {
+                gemini = await analyzeTranscript({ transcript: text, topic: sessionData.topic || 'Group Discussion' });
+              }
               if (gemini && typeof gemini === 'object') {
                 const overallScore = Number.isFinite(Number(gemini.overallScore)) ? Math.round(Number(gemini.overallScore)) : 0;
-                const communicationScore = Number.isFinite(Number(gemini.clarityScore)) ? Math.round(Number(gemini.clarityScore)) : overallScore;
-                const knowledgeScore = Number.isFinite(Number(gemini.vocabularyScore)) ? Math.round(Number(gemini.vocabularyScore)) : overallScore;
-                ai = { overallScore, communicationScore, knowledgeScore, participationSummary: gemini.summary || gemini.detailedFeedback || '', strengths: Array.isArray(gemini.strengths) ? gemini.strengths : [], improvements: Array.isArray(gemini.improvements) ? gemini.improvements : [] };
+                const communicationScore = Number.isFinite(Number(gemini.communicationScore ?? gemini.clarityScore)) ? Math.round(Number(gemini.communicationScore ?? gemini.clarityScore)) : overallScore;
+                const knowledgeScore = Number.isFinite(Number(gemini.knowledgeScore ?? gemini.vocabularyScore)) ? Math.round(Number(gemini.knowledgeScore ?? gemini.vocabularyScore)) : overallScore;
+                ai = {
+                  overallScore,
+                  communicationScore,
+                  knowledgeScore,
+                  participationSummary: gemini.feedback || gemini.summary || gemini.detailedFeedback || '',
+                  strengths: Array.isArray(gemini.strengths) ? gemini.strengths : [],
+                  improvements: Array.isArray(gemini.improvements) ? gemini.improvements : []
+                };
               }
-            } catch {}
+            } catch { }
           }
           const fallbackAi = {
             overallScore: 70,
@@ -442,7 +469,7 @@ Generate a comprehensive analysis in JSON format with:
   return (
     <div className="min-h-screen pb-20 bg-gradient-to-br from-gray-50 to-purple-50">
       <TopNav activePage="Explore" />
-      
+
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
@@ -460,6 +487,7 @@ Generate a comprehensive analysis in JSON format with:
             <div className="flex gap-2">
               <button onClick={() => setAnalysisMode('dummy')} className={`px-3 py-1.5 rounded-xl text-sm font-bold ${analysisMode === 'dummy' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>Dummy</button>
               <button onClick={() => setAnalysisMode('original')} className={`px-3 py-1.5 rounded-xl text-sm font-bold ${analysisMode === 'original' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Original</button>
+              <button onClick={() => setAnalysisMode('ai')} className={`px-3 py-1.5 rounded-xl text-sm font-bold ${analysisMode === 'ai' ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white' : 'bg-gray-100 text-gray-700'}`}>AI Mode</button>
             </div>
           </div>
         </motion.div>

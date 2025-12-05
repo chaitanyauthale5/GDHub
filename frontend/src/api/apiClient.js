@@ -323,7 +323,13 @@ const globalGd = {
   },
 };
 
-let api = { auth, entities, appLogs, integrations, zego, globalGd };
+const aiAnalysis = {
+  async analyzeGDParticipant({ topic, transcript, durationSec }) {
+    return post('/api/ai-analysis/gd-participant', { topic, transcript, durationSec });
+  },
+};
+
+let api = { auth, entities, appLogs, integrations, zego, globalGd, aiAnalysis };
 const rooms = {
   gd: {
     async start(id, args) {
