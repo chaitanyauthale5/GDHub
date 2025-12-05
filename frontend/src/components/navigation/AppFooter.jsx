@@ -1,5 +1,5 @@
-import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { createPageUrl } from '../../utils';
 
 export default function AppFooter() {
@@ -8,8 +8,6 @@ export default function AppFooter() {
 
   const p = (location.pathname || '').toLowerCase();
   const shouldHide = (
-    p === '/login' ||
-    p === '/register' ||
     p === '/createroom' ||
     p === '/createdebateroom' ||
     p === '/createtournament' ||
@@ -39,7 +37,7 @@ export default function AppFooter() {
   }, [location.pathname]);
 
   const isAbout = p === '/about';
-  const showFooter = !shouldHide && atBottom;
+  const showFooter = !shouldHide;
 
   return (
     <>

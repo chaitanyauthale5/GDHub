@@ -6,6 +6,7 @@ const User = require('../models/User');
 const UserProfile = require('../models/UserProfile');
 const config = require('../config');
 const auth = require('../middleware/auth');
+const firebaseAdmin = require('../utils/firebaseAdmin');
 
 const router = express.Router();
 
@@ -43,6 +44,40 @@ router.post('/login', async (req, res) => {
         res.json({ token, user: { id: user._id.toString(), email: user.email, full_name: user.full_name, avatar: user.avatar, xp_points: user.xp_points, level: user.level } });
     } catch (e) {
         res.status(500).json({ message: 'Server error' });
+    }
+});
+
+router.post('/firebase', async (req, res) => {
+    try {
+        const { idToken, full_name, avatar } = req.body || {};
+        if (!idToken) return res.status(400).json({ message: 'Missing idToken' });
+        const decoded = await firebaseAdmin.auth().verifyIdToken(idToken);
+        const email = decoded.email;
+        if (!email) return res.status(400).json({ message: 'Email not present in token' });
+        const firebase_uid = decoded.uid;
+        const displayName = full_name || decoded.name || (email.split('@')[0]);
+        const photoURL = avatar || decoded.picture;
+        let user = await User.findOne({ email });
+        if (!user) {
+            user = await User.create({ email, full_name: displayName, avatar: photoURL, auth_provider: 'google', firebase_uid });
+            try { await UserProfile.create({ user_id: user.email }); } catch { }
+        } else {
+            const updates = {};
+            if (!user.firebase_uid) updates.firebase_uid = firebase_uid;
+            if (user.auth_provider !== 'google') updates.auth_provider = 'google';
+            if (!user.avatar && photoURL) updates.avatar = photoURL;
+            if (Object.keys(updates).length) {
+                await User.updateOne({ _id: user._id }, { $set: updates });
+                user = await User.findById(user._id);
+            }
+        }
+        const token = signToken(user);
+        res.cookie('token', token, { httpOnly: true, sameSite: 'lax' });
+        res.json({ token, user: { id: user._id.toString(), email: user.email, full_name: user.full_name, avatar: user.avatar, xp_points: user.xp_points, level: user.level } });
+    } catch (e) {
+        console.error('Firebase verify error:', e);
+        const msg = (config.nodeEnv !== 'production' && (e?.message || e?.errorInfo?.message)) ? (e.message || e.errorInfo.message) : 'Invalid Firebase token';
+        res.status(401).json({ message: msg });
     }
 });
 
