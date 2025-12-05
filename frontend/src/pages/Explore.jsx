@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { motion } from 'framer-motion';
-import { MessageSquare, Mic, Bot, UserCheck } from 'lucide-react';
+import { MessageSquare, Mic, Bot, UserCheck, Target } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
 
@@ -43,13 +43,22 @@ export default function Explore() {
       icon: Bot,
       gradient: 'from-teal-400 to-green-500',
       link: 'SoloPractice'
+    },
+    {
+      id: 'prep-guide',
+      title: 'Prep Guide',
+      subtitle: 'Tech & Govt Exams',
+      description: 'Roadmaps for Software, UPSC, MPSC, Banking, and company-specific interview prep',
+      icon: Target,
+      gradient: 'from-violet-500 to-purple-500',
+      link: null
     }
   ];
 
   return (
     <div className="min-h-screen pb-20">
       <TopNav activePage="Explore" />
-      
+
       <div className="max-w-7xl mx-auto px-6 pt-28">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -64,7 +73,7 @@ export default function Explore() {
           {practiceModesData.map((mode, index) => {
             const Icon = mode.icon;
             const CardContent = (
-              <ClayCard 
+              <ClayCard
                 key={mode.id}
                 elevated
                 className="h-full border-2 border-white/60"
@@ -77,11 +86,7 @@ export default function Explore() {
                   <h3 className="text-2xl font-bold mb-2">{mode.title}</h3>
                   <p className="text-purple-600 font-bold mb-3 text-lg">{mode.subtitle}</p>
                   <p className="text-gray-600 flex-1 leading-relaxed">{mode.description}</p>
-                  {!mode.link && (
-                    <span className="inline-block mt-4 px-5 py-2 bg-gradient-to-r from-gray-100 to-gray-200 text-gray-600 rounded-full text-sm font-bold shadow-inner border-2 border-gray-300">
-                      Coming Soon
-                    </span>
-                  )}
+
                 </div>
               </ClayCard>
             );

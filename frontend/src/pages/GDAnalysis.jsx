@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 
 import { motion } from 'framer-motion';
-import { AlertCircle, Award, CheckCircle, Clock, Home, MessageSquare, RotateCcw, TrendingUp, Users } from 'lucide-react';
+import { AlertCircle, Award, CheckCircle, Clock, Home, MessageSquare, RotateCcw, TrendingUp, Users, Download } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
 
 export default function GDAnalysis() {
@@ -13,11 +13,11 @@ export default function GDAnalysis() {
   const [analysis, setAnalysis] = useState(null);
   const [perUser, setPerUser] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState(/** @type {string} */('feedback'));
+  const [activeTab, setActiveTab] = useState('feedback');
   const [analysisMode, setAnalysisMode] = useState(() => {
     const sp = new URLSearchParams(window.location.search);
-    const raw = (sp.get('analysis') || localStorage.getItem('gd_analysis_mode') || 'dummy').toLowerCase();
-    return ['original', 'ai'].includes(raw) ? raw : 'dummy';
+    const raw = (sp.get('analysis') || localStorage.getItem('gd_analysis_mode') || 'original').toLowerCase();
+    return ['original', 'ai'].includes(raw) ? raw : 'original';
   });
 
   // persist mode and update URL param for shareability
@@ -204,22 +204,6 @@ export default function GDAnalysis() {
 
   const generateAnalysis = async (sessionData) => {
     try {
-      // If user selected Dummy mode, short-circuit with demo-like values
-      if (analysisMode === 'dummy') {
-        setAnalysis({
-          overallScore: 72,
-          participationScore: 70,
-          communicationScore: 74,
-          knowledgeScore: 69,
-          teamworkScore: 75,
-          strengths: ['Clear articulation of ideas', 'Good listening and turn-taking', 'Constructive tone'],
-          improvements: ['Provide more concrete examples', 'Summarize key points more often', 'Invite quieter members'],
-          detailedFeedback: 'The group discussion demonstrated solid collaboration and idea flow. You contributed regularly and helped keep the discussion on track. Focus on adding evidence and drawing others in to elevate the conversation further.',
-          tips: ['Use “because” statements to bring evidence', 'Summarize the last 2–3 points every few minutes', 'Ask open questions to engage quieter peers'],
-        });
-        return;
-      }
-
       if (sessionData?.room_id) {
         const transcripts = await api.entities.GDTranscript.filter({ room_id: sessionData.room_id });
         const group = computeGroupMetrics(transcripts, sessionData.participants || [], sessionData.topic || '');
@@ -429,6 +413,26 @@ Generate a comprehensive analysis in JSON format with:
     }
   };
 
+  const downloadTranscript = async () => {
+    if (!session?.room_id) return;
+    try {
+      const transcripts = await api.entities.GDTranscript.filter({ room_id: session.room_id });
+      const sorted = transcripts.sort((a, b) => (a.start_ms || 0) - (b.start_ms || 0));
+      const text = sorted.map(t => `[${new Date(t.start_ms).toISOString().substr(11, 8)}] ${t.user_name || 'User'}: ${t.text}`).join('\n');
+      const blob = new Blob([text], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `transcript-${session.room_id}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Failed to download transcript', e);
+    }
+  };
+
   const ScoreRing = ({ score, label, color }) => (
     <div className="text-center">
       <div className="relative w-24 h-24 mx-auto mb-2">
@@ -485,7 +489,6 @@ Generate a comprehensive analysis in JSON format with:
           <div className="bg-white rounded-2xl shadow-xl border-2 border-gray-100 p-3 flex items-center justify-between">
             <div className="text-sm font-bold text-gray-700">Analysis Mode</div>
             <div className="flex gap-2">
-              <button onClick={() => setAnalysisMode('dummy')} className={`px-3 py-1.5 rounded-xl text-sm font-bold ${analysisMode === 'dummy' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'}`}>Dummy</button>
               <button onClick={() => setAnalysisMode('original')} className={`px-3 py-1.5 rounded-xl text-sm font-bold ${analysisMode === 'original' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700'}`}>Original</button>
               <button onClick={() => setAnalysisMode('ai')} className={`px-3 py-1.5 rounded-xl text-sm font-bold ${analysisMode === 'ai' ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white' : 'bg-gray-100 text-gray-700'}`}>AI Mode</button>
             </div>
@@ -494,7 +497,14 @@ Generate a comprehensive analysis in JSON format with:
 
         {/* Session Info */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white rounded-3xl p-6 shadow-xl border-2 border-gray-100 mb-6">
-          <h2 className="font-bold text-lg mb-4 text-purple-600">Session Details</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-bold text-lg text-purple-600">Session Details</h2>
+            {session?.room_id && (
+              <button onClick={downloadTranscript} className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-bold text-gray-700 transition-colors">
+                <Download className="w-4 h-4" /> Download Transcript
+              </button>
+            )}
+          </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="text-center p-4 bg-purple-50 rounded-2xl">
               <MessageSquare className="w-6 h-6 mx-auto mb-2 text-purple-600" />

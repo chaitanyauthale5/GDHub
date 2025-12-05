@@ -97,7 +97,7 @@ export default function GDRoom() {
         if (!AC) return;
         ctx = new AC();
         audioCtxRef.current = ctx;
-        try { ctx.resume && ctx.resume(); } catch {}
+        try { ctx.resume && ctx.resume(); } catch { }
       }
 
       const source = ctx.createMediaStreamSource(localStream);
@@ -112,7 +112,7 @@ export default function GDRoom() {
 
       const uid = (user?.email || user?.id) ? String(user.email || user.id) : null;
       localAnalyserRef.current = { analyser, id: uid };
-    } catch {}
+    } catch { }
   }, [localStream, user?.email, user?.id]);
 
   useEffect(() => {
@@ -143,16 +143,16 @@ export default function GDRoom() {
 
             const peerUserId = String(peerId || '').includes('_') ? String(peerId).slice(String(peerId).lastIndexOf('_') + 1) : String(peerId || '');
             map.set(peerId, { analyser, userId: peerUserId });
-          } catch {}
+          } catch { }
         }
       }
       for (const key of Array.from(map.keys())) {
         if (!current.has(key)) {
-          try { map.get(key)?.analyser?.disconnect(); } catch {}
+          try { map.get(key)?.analyser?.disconnect(); } catch { }
           map.delete(key);
         }
       }
-    } catch {}
+    } catch { }
   }, [remoteStreams]);
 
   useEffect(() => {
@@ -175,7 +175,7 @@ export default function GDRoom() {
             }
             const avg = sum / buffer.length;
             if (avg > bestVal) { bestVal = avg; bestId = id; }
-          } catch {}
+          } catch { }
         };
         if (la) process(la.analyser, String(la.id));
         for (const [, obj] of remoteAnalysersRef.current) process(obj.analyser, String(obj.userId));
@@ -192,7 +192,7 @@ export default function GDRoom() {
         raf = requestAnimationFrame(tick);
       };
       raf = requestAnimationFrame(tick);
-    } catch {}
+    } catch { }
     return () => { if (raf) cancelAnimationFrame(raf); };
   }, [localStream, remoteStreams]);
 
@@ -216,7 +216,7 @@ export default function GDRoom() {
     return displayMetrics.reduce((s, x) => s + (x.talkMs || 0), 0);
   }, [displayMetrics]);
 
-  const colorClasses = ['bg-purple-400','bg-blue-400','bg-green-400','bg-pink-400','bg-yellow-400','bg-cyan-400'];
+  const colorClasses = ['bg-purple-400', 'bg-blue-400', 'bg-green-400', 'bg-pink-400', 'bg-yellow-400', 'bg-cyan-400'];
   const speakingUid = speakingUidVol || metrics?.['lastSpeakerUserId'];
   const localUserId = user?.email || user?.id;
 
@@ -235,7 +235,7 @@ export default function GDRoom() {
             }
           }
         }
-      } catch {}
+      } catch { }
     };
 
     poll();
@@ -262,8 +262,8 @@ export default function GDRoom() {
     try {
       el.srcObject = stream;
       if (isSelf) el.muted = true;
-      el.onloadedmetadata = () => el.play().catch(() => {});
-    } catch {}
+      el.onloadedmetadata = () => el.play().catch(() => { });
+    } catch { }
   };
 
   const endSession = async () => {
@@ -272,7 +272,7 @@ export default function GDRoom() {
       setSessionActive(false);
 
       if (!room) {
-        try { stopLocalTracks(); } catch {}
+        try { stopLocalTracks(); } catch { }
         navigate(createPageUrl('Dashboard'));
         return;
       }
@@ -281,14 +281,14 @@ export default function GDRoom() {
       const amHost = user && (hostId === user.email || hostId === user.id);
 
       if (!amHost) {
-        try { stopLocalTracks(); } catch {}
+        try { stopLocalTracks(); } catch { }
         navigate(createPageUrl('GDAnalysis', { roomId: room.id }));
         return;
       }
 
       // Host ends the room and navigates to analysis
       await api.entities.GDRoom.update(room.id, { status: 'completed' });
-      try { stopLocalTracks(); } catch {}
+      try { stopLocalTracks(); } catch { }
       navigate(createPageUrl('GDAnalysis', { roomId: room.id }));
     } catch (error) {
       console.error('Error ending session:', error);
@@ -330,10 +330,10 @@ export default function GDRoom() {
             <div className="px-2 py-1 bg-gray-700 rounded">
               <span className="opacity-80">Speaker:</span> {currentSpeakerName}
             </div>
-            {displayMetrics.slice(0,3).map((m, i) => (
+            {displayMetrics.slice(0, 3).map((m, i) => (
               <div key={m.userId || i} className="px-2 py-1 bg-gray-700 rounded flex items-center gap-2">
                 <span className="font-semibold">{m.name}</span>
-                <span>{Math.round((m.talkMs || 0)/1000)}s</span>
+                <span>{Math.round((m.talkMs || 0) / 1000)}s</span>
                 {m && m['wpmAvg'] ? <span className="opacity-80">{m['wpmAvg']}wpm</span> : null}
                 {typeof (m && m['fillerRate']) === 'number' ? <span className="opacity-80">{m['fillerRate']}/100w</span> : null}
               </div>
@@ -369,9 +369,8 @@ export default function GDRoom() {
             <option value="hi-IN">Hindi</option>
           </select>
 
-          <div className={`px-4 py-2 rounded-xl flex items-center gap-2 ${
-            timeLeft < 60 ? 'bg-red-500' : 'bg-gray-700'
-          } text-white font-bold`}>
+          <div className={`px-4 py-2 rounded-xl flex items-center gap-2 ${timeLeft < 60 ? 'bg-red-500' : 'bg-gray-700'
+            } text-white font-bold`}>
             <Clock className="w-5 h-5" />
             {formatTime(timeLeft)}
           </div>
