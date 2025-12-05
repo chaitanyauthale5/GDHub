@@ -1,15 +1,21 @@
-import { api } from '@/api/apiClient';
+﻿import { api } from '@/api/apiClient';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Building2, Calendar, Clock, Globe, Lock, Trophy, Upload, Users, X } from 'lucide-react';
+import { ArrowLeft, Building2, Calendar as CalendarIcon, Clock, Globe, Lock, Trophy, Upload, Users, X, Info } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { Badge } from '@/components/ui/badge';
 import TopNav from '../components/navigation/TopNav';
-import ClayCard from '../components/shared/ClayCard';
 
 export default function CreateTournament() {
   const navigate = useNavigate();
@@ -149,242 +155,290 @@ export default function CreateTournament() {
     debate: 'Debate'
   };
 
+  // Helper to show selected date as dd-mm-yyyy
+  const formatDate = (value) => {
+    if (!value) return '';
+    try {
+      const d = new Date(value);
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      return `${dd}-${mm}-${yyyy}`;
+    } catch {
+      return '';
+    }
+  };
+
   return (
-    <div className="min-h-screen pb-20">
+    <div className="min-h-screen pb-24">
       <TopNav activePage="Explore" />
-      
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 sm:pt-28">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-medium mb-4"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            Back
-          </button>
-          <h1 className="text-4xl font-black mb-2 gradient-text">Create {typeLabels[tournamentType]} Tournament</h1>
-          <p className="text-gray-600">Set up a tournament for your organization</p>
-        </motion.div>
+      <TooltipProvider>
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-24 sm:pt-28">
+          {/* Header card */}
+          <Card className="mb-8 border-none bg-gradient-to-br from-orange-50 to-pink-50 shadow-md animate-fadeIn duration-700">
+            <CardHeader className="py-6">
+              <button
+                onClick={() => navigate(-1)}
+                className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-medium mb-3"
+              >
+                <ArrowLeft className="w-5 h-5" />
+                Back
+              </button>
+              <CardTitle className="text-3xl sm:text-4xl font-black tracking-tight flex items-center gap-2">
+                <span className="text-2xl"></span>
+                Create {typeLabels[tournamentType]} Tournament
+                <Badge className="ml-2" variant="secondary">{typeLabels[tournamentType]}</Badge>
+              </CardTitle>
+              <CardDescription className="mt-2">Set up a tournament for your organization</CardDescription>
+            </CardHeader>
+          </Card>
 
-        <ClayCard className="mb-6">
-          <div className="space-y-6">
-            {/* Tournament Name */}
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                <Trophy className="w-5 h-5 text-orange-500" />
-                Tournament Name *
-              </label>
-              <Input
-                placeholder="e.g., Annual GD Championship 2025"
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
-                className="clay-card border-none h-12"
-              />
-            </div>
+          {/* Two-column grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left: Main form fields */}
+            <Card className="lg:col-span-7 border border-gray-100/70 shadow-sm hover:shadow-md transition-shadow animate-fadeIn duration-700">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Trophy className="w-5 h-5 text-orange-500" />
+                  Tournament details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Tournament Name */}
+                <div>
+                  <Label className="text-sm text-gray-600 flex items-center gap-2 mb-2">
+                    <Trophy className="w-4 h-4 text-orange-500" />
+                    Tournament Name *
+                  </Label>
+                  <Input
+                    placeholder="e.g., Annual GD Championship 2025"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="h-12 text-base text-gray-800 hover:shadow-sm transition-shadow"
+                  />
+                </div>
 
-            {/* Organizer */}
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                <Building2 className="w-5 h-5 text-blue-500" />
-                Organization / College / Company *
-              </label>
-              <Input
-                placeholder="e.g., ABC University, XYZ Corp"
-                value={formData.organizer}
-                onChange={(e) => setFormData({...formData, organizer: e.target.value})}
-                className="clay-card border-none h-12"
-              />
-            </div>
+                {/* Organizer */}
+                <div>
+                  <Label className="text-sm text-gray-600 flex items-center gap-2 mb-2">
+                    <Building2 className="w-4 h-4 text-blue-500" />
+                    Organization / College / Company *
+                  </Label>
+                  <Input
+                    placeholder="e.g., ABC University, XYZ Corp"
+                    value={formData.organizer}
+                    onChange={(e) => setFormData({ ...formData, organizer: e.target.value })}
+                    className="h-12 text-base text-gray-800 hover:shadow-sm transition-shadow"
+                  />
+                </div>
 
-            {/* Description */}
-            <div>
-              <label className="text-sm font-semibold text-gray-700 mb-2 block">
-                Description
-              </label>
-              <Textarea
-                placeholder="Describe your tournament..."
-                value={formData.description}
-                onChange={(e) => setFormData({...formData, description: e.target.value})}
-                className="clay-card border-none min-h-24"
-              />
-            </div>
+                {/* Description */}
+                <div>
+                  <Label className="text-sm text-gray-600 mb-2 block">Description</Label>
+                  <Textarea
+                    placeholder="Describe your tournament..."
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="min-h-24 text-base text-gray-800 hover:shadow-sm transition-shadow"
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
-            <div className="grid grid-cols-2 gap-4">
-              {/* Visibility */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                  {formData.visibility === 'public' ? (
-                    <Globe className="w-5 h-5 text-green-500" />
-                  ) : (
-                    <Lock className="w-5 h-5 text-orange-500" />
-                  )}
-                  Visibility
-                </label>
-                <Select value={formData.visibility} onValueChange={(val) => setFormData({...formData, visibility: val})}>
-                  <SelectTrigger className="clay-card border-none h-12">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="public">Public</SelectItem>
-                    <SelectItem value="private">Private</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Group Size */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+            {/* Right: Settings */}
+            <Card className="lg:col-span-5 border border-gray-100/70 shadow-sm hover:shadow-md transition-shadow animate-fadeIn duration-700">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-xl">
                   <Users className="w-5 h-5 text-purple-500" />
-                  Group Size
-                </label>
-                <Select value={formData.group_size.toString()} onValueChange={(val) => setFormData({...formData, group_size: parseInt(val)})}>
-                  <SelectTrigger className="clay-card border-none h-12">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="2">2 per group</SelectItem>
-                    <SelectItem value="3">3 per group</SelectItem>
-                    <SelectItem value="4">4 per group</SelectItem>
-                    <SelectItem value="5">5 per group</SelectItem>
-                    <SelectItem value="6">6 per group</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              {/* Domain */}
-              <div>
-                <label className="text-sm font-semibold text-gray-700 mb-2 block">
-                  Topic Domain
-                </label>
-                <Select value={formData.domain} onValueChange={(val) => setFormData({...formData, domain: val})}>
-                  <SelectTrigger className="clay-card border-none h-12">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {domains.map((d) => (
-                      <SelectItem key={d} value={d.toLowerCase()}>{d}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Duration */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                  <Clock className="w-5 h-5 text-cyan-500" />
-                  Duration (mins)
-                </label>
-                <Select value={formData.duration.toString()} onValueChange={(val) => setFormData({...formData, duration: parseInt(val)})}>
-                  <SelectTrigger className="clay-card border-none h-12">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="10">10 minutes</SelectItem>
-                    <SelectItem value="15">15 minutes</SelectItem>
-                    <SelectItem value="20">20 minutes</SelectItem>
-                    <SelectItem value="30">30 minutes</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Start Date */}
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                <Calendar className="w-5 h-5 text-pink-500" />
-                Start Date (Optional)
-              </label>
-              <Input
-                type="datetime-local"
-                value={formData.start_date}
-                onChange={(e) => setFormData({...formData, start_date: e.target.value})}
-                className="clay-card border-none h-12"
-              />
-            </div>
-
-            {/* Max Participants */}
-            <div>
-              <label className="text-sm font-semibold text-gray-700 mb-2 block">
-                Max Participants
-              </label>
-              <Input
-                type="number"
-                value={formData.max_participants}
-                onChange={(e) => setFormData({...formData, max_participants: parseInt(e.target.value)})}
-                className="clay-card border-none h-12"
-              />
-            </div>
-
-            {/* Bulk Upload Students */}
-            <div className="clay-card p-4">
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                <Upload className="w-5 h-5 text-green-600" />
-                Bulk Upload Students (CSV)
-              </label>
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) parseCSV(file);
-                }}
-                className="block w-full text-sm text-gray-600"
-              />
-              {csvParticipants.length > 0 && (
-                <div className="mt-3 p-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-700 flex items-center justify-between">
-                  <span>{csvParticipants.length} students parsed from CSV</span>
-                  <button onClick={() => setCsvParticipants([])} className="flex items-center gap-1 text-green-800 hover:underline"><X className="w-4 h-4" /> Clear</button>
-                </div>
-              )}
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  Settings & Configuration
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {/* Visibility */}
                 <div>
-                  <label className="text-sm text-gray-700">Group Size (people per group)</label>
-                  <Input type="number" value={formData.group_size} onChange={(e) => setFormData({ ...formData, group_size: parseInt(e.target.value || '0') })} className="clay-card border-none h-10 mt-1" />
+                  <div className="flex items-center gap-2 mb-2">
+                    {formData.visibility === 'public' ? (
+                      <Globe className="w-4 h-4 text-green-500" />
+                    ) : (
+                      <Lock className="w-4 h-4 text-orange-500" />
+                    )}
+                    <Label className="text-sm text-gray-600">Visibility</Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="ml-1 inline-flex items-center text-gray-400 hover:text-gray-600">
+                          <Info className="w-4 h-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Public tournaments are discoverable. Private require the exact ID.</TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Select value={formData.visibility} onValueChange={(val) => setFormData({ ...formData, visibility: val })}>
+                    <SelectTrigger className="h-12 text-base text-gray-800">
+                      <SelectValue placeholder="Select visibility" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="public">Public</SelectItem>
+                      <SelectItem value="private">Private</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+
+                {/* Group Size */}
                 <div>
-                  <label className="text-sm text-gray-700">Or Number of Groups (optional)</label>
-                  <Input type="number" value={groupsCount} onChange={(e) => setGroupsCount(e.target.value)} placeholder="e.g., 10" className="clay-card border-none h-10 mt-1" />
+                  <Label className="text-sm text-gray-600 flex items-center gap-2 mb-2">
+                    <Users className="w-4 h-4 text-purple-500" />
+                    Group Size
+                  </Label>
+                  <Select value={formData.group_size.toString()} onValueChange={(val) => setFormData({ ...formData, group_size: parseInt(val) })}>
+                    <SelectTrigger className="h-12 text-base text-gray-800">
+                      <SelectValue placeholder="Select group size" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2">2 per group</SelectItem>
+                      <SelectItem value="3">3 per group</SelectItem>
+                      <SelectItem value="4">4 per group</SelectItem>
+                      <SelectItem value="5">5 per group</SelectItem>
+                      <SelectItem value="6">6 per group</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">We will randomly assign uploaded students into groups based on the group size or groups count.</p>
-            </div>
+
+                {/* Domain & Duration */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm text-gray-600 mb-2 block">Topic Domain</Label>
+                    <Select value={formData.domain} onValueChange={(val) => setFormData({ ...formData, domain: val })}>
+                      <SelectTrigger className="h-12 text-base text-gray-800">
+                        <SelectValue placeholder="Select a domain" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {domains.map((d) => (
+                          <SelectItem key={d} value={d.toLowerCase()}>{d}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Clock className="w-4 h-4 text-cyan-500" />
+                      <Label className="text-sm text-gray-600">Duration (mins)</Label>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button className="ml-1 inline-flex items-center text-gray-400 hover:text-gray-600">
+                            <Info className="w-4 h-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Set the speaking round duration per group.</TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <Select value={formData.duration.toString()} onValueChange={(val) => setFormData({ ...formData, duration: parseInt(val) })}>
+                      <SelectTrigger className="h-12 text-base text-gray-800">
+                        <SelectValue placeholder="Select duration" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10 minutes</SelectItem>
+                        <SelectItem value="15">15 minutes</SelectItem>
+                        <SelectItem value="20">20 minutes</SelectItem>
+                        <SelectItem value="30">30 minutes</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Start Date */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <CalendarIcon className="w-4 h-4 text-pink-500" />
+                    <Label className="text-sm text-gray-600">Start Date (Optional)</Label>
+                  </div>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start text-left font-normal h-12 text-base">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {formData.start_date ? formatDate(formData.start_date) : <span className="text-muted-foreground">Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={formData.start_date ? new Date(formData.start_date) : undefined}
+                        onSelect={(d) => setFormData({ ...formData, start_date: d ? d.toISOString() : '' })}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Max Participants */}
+                <div>
+                  <Label className="text-sm text-gray-600 mb-2 block">Max Participants</Label>
+                  <Input
+                    type="number"
+                    value={formData.max_participants}
+                    onChange={(e) => setFormData({ ...formData, max_participants: parseInt(e.target.value || '0') })}
+                    className="h-12 text-base text-gray-800 hover:shadow-sm transition-shadow"
+                  />
+                </div>
+
+                {/* Bulk Upload Students */}
+                <div className="rounded-xl border bg-card p-4 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Upload className="w-4 h-4 text-green-600" />
+                    <Label className="text-sm text-gray-600">Bulk Upload Students (CSV)</Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="ml-1 inline-flex items-center text-gray-400 hover:text-gray-600">
+                          <Info className="w-4 h-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Upload a CSV with columns like name,email[,phone]</TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) parseCSV(file);
+                    }}
+                    className="block w-full text-sm text-gray-600"
+                  />
+                  {csvParticipants.length > 0 && (
+                    <div className="mt-3 p-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-700 flex items-center justify-between">
+                      <span>{csvParticipants.length} students parsed from CSV</span>
+                      <button onClick={() => setCsvParticipants([])} className="flex items-center gap-1 text-green-800 hover:underline"><X className="w-4 h-4" /> Clear</button>
+                    </div>
+                  )}
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-sm text-gray-600">Group Size (people per group)</Label>
+                      <Input type="number" value={formData.group_size} onChange={(e) => setFormData({ ...formData, group_size: parseInt(e.target.value || '0') })} className="h-10 mt-1 text-base text-gray-800" />
+                    </div>
+                    <div>
+                      <Label className="text-sm text-gray-600">Or Number of Groups (optional)</Label>
+                      <Input type="number" value={groupsCount} onChange={(e) => setGroupsCount(e.target.value)} placeholder="e.g., 10" className="h-10 mt-1 text-base text-gray-800" />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">We will randomly assign uploaded students into groups based on the group size or groups count.</p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleCreate}
-            disabled={loading}
-            className="mt-8 w-full py-5 rounded-3xl bg-gradient-to-r from-orange-400 to-pink-500 text-white font-bold text-lg shadow-xl disabled:opacity-50"
-          >
-            {loading ? 'Creating...' : 'Create Tournament'}
-          </motion.button>
-        </ClayCard>
-
-        <ClayCard className="bg-gradient-to-br from-orange-50 to-pink-50">
-          <h3 className="font-bold text-lg mb-3">Tournament Tips:</h3>
-          <ul className="space-y-2 text-gray-700 text-sm">
-            <li className="flex items-start gap-2">
-              <span className="w-2 h-2 bg-orange-500 rounded-full mt-2"></span>
-              Public tournaments are visible to everyone and can be joined with the tournament ID
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-2 h-2 bg-pink-500 rounded-full mt-2"></span>
-              Private tournaments require the exact ID to find and register
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-2 h-2 bg-purple-500 rounded-full mt-2"></span>
-              Participants will receive a unique password via email upon registration
-            </li>
-          </ul>
-        </ClayCard>
-      </div>
+          {/* Primary CTA */}
+          <div className="mt-8 flex justify-center">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleCreate}
+              disabled={loading}
+              className="px-10 py-5 rounded-3xl bg-gradient-to-r from-orange-400 to-pink-500 text-white font-bold text-lg shadow-xl disabled:opacity-50 hover:shadow-[0_0_25px_rgba(236,72,153,0.45)]"
+            >
+              {loading ? 'Creating...' : 'Create Tournament'}
+            </motion.button>
+          </div>
+        </div>
+      </TooltipProvider>
     </div>
   );
 }
