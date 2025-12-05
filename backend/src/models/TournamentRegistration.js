@@ -13,3 +13,4 @@ const TournamentRegistrationSchema = new mongoose.Schema({
     accepted_at: { type: Date }
 }, { timestamps: true });
 module.exports = mongoose.model('TournamentRegistration', TournamentRegistrationSchema);
+     
