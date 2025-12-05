@@ -216,6 +216,9 @@ const auth = {
   async register({ email, password, full_name }) {
     return post('/api/auth/register', { email, password, full_name });
   },
+  async firebaseLogin({ idToken, full_name, avatar }) {
+    return post('/api/auth/firebase', { idToken, full_name, avatar });
+  },
   async logout(redirectUrl) {
     try {
       await post('/api/auth/logout', {});

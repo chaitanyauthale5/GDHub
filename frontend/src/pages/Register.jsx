@@ -1,7 +1,8 @@
 import { api } from '@/api/apiClient';
-import { useState } from 'react';
+import { signInWithGooglePopup } from '@/lib/firebase';
 import { motion } from 'framer-motion';
-import { Mail, Lock, User as UserIcon } from 'lucide-react';
+import { Chrome, Lock, Mail, User as UserIcon } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 export default function Register() {
@@ -10,18 +11,38 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [gLoading, setGLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
+      // basic validation
+      const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+      if (!fullName || fullName.trim().length < 2) throw new Error('Please enter your full name');
+      if (!emailOk) throw new Error('Please enter a valid email');
+      if (!password || password.length < 8) throw new Error('Password must be at least 8 characters');
       await api.auth.register({ email, password, full_name: fullName });
       window.location.href = '/';
     } catch (err) {
       setError(err.message || 'Registration failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogle = async () => {
+    setError('');
+    setGLoading(true);
+    try {
+      const { idToken, user } = await signInWithGooglePopup();
+      await api.auth.firebaseLogin({ idToken, full_name: user.displayName || fullName || undefined, avatar: user.photoURL || undefined });
+      window.location.href = '/';
+    } catch (err) {
+      setError(err.message || 'Google sign-in failed');
+    } finally {
+      setGLoading(false);
     }
   };
 
@@ -103,6 +124,18 @@ export default function Register() {
               className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 font-bold shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {loading ? 'Creating account...' : 'Create account'}
+            </motion.button>
+            <div className="relative py-1 text-center text-xs text-slate-400">or</div>
+            <motion.button
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              type="button"
+              onClick={handleGoogle}
+              disabled={gLoading}
+              className="w-full py-3 rounded-xl border border-slate-700 bg-slate-950 font-medium flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <Chrome className="w-4 h-4" />
+              {gLoading ? 'Continuing...' : 'Continue with Google'}
             </motion.button>
           </form>
           <p className="mt-4 text-sm text-center text-slate-300">
