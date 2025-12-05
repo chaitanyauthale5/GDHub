@@ -366,7 +366,7 @@ async function analyzeExtemporeWithGemini({ topic, difficulty, category, duratio
     }
 
     try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${encodeURIComponent(key)}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`;
         const payload = {
             contents: [
                 {
@@ -407,4 +407,85 @@ async function analyzeExtemporeWithGemini({ topic, difficulty, category, duratio
     }
 }
 
-module.exports = { analyzeExtemporeWithGemini };
+function buildGDParticipantPrompt({ topic, transcript, durationSec }) {
+    return `You are an expert Group Discussion (GD) evaluator.
+Analyze the following transcript for a specific participant in a Group Discussion.
+
+Topic: ${topic}
+Speaking Duration: ${durationSec} seconds
+
+Transcript of this participant:
+${transcript}
+
+Provide a detailed evaluation in STRICT JSON format with the following keys:
+{
+  "overallScore": number (0-100),
+  "communicationScore": number (0-100),
+  "knowledgeScore": number (0-100),
+  "participationScore": number (0-100),
+  "teamworkScore": number (0-100),
+  "strengths": string[] (3-4 specific strengths based on the text),
+  "improvements": string[] (3-4 specific actionable improvements based on the text),
+  "feedback": string (A personalized paragraph addressing the participant directly, referencing specific things they said. Do NOT give generic advice. Quote their words if possible.),
+  "tips": string[] (3 actionable tips for next time)
+}
+
+If the transcript is very short or empty, provide low scores and advice to speak more.
+`;
+}
+
+async function analyzeGDParticipantWithGemini({ topic, transcript, apiKey, durationSec }) {
+    const key = apiKey || process.env.GEMINI_API_KEY;
+    if (!key) {
+        // Fallback to heuristic if no key
+        const base = buildHeuristicExtemporeAnalysis({ topic, durationSec, transcript });
+        return {
+            overallScore: base.overallScore,
+            communicationScore: base.fluencyScore,
+            knowledgeScore: base.contentScore,
+            participationScore: base.deliveryScore, // proxy
+            teamworkScore: base.structureScore, // proxy
+            strengths: base.strengths,
+            improvements: base.improvements,
+            feedback: 'Analysis generated locally. Reason: Missing GEMINI_API_KEY in backend environment.',
+            tips: base.practiceTopics
+        };
+    }
+
+    try {
+        const prompt = buildGDParticipantPrompt({ topic, transcript, durationSec });
+        // Using gemini-2.5-flash as found in available models
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`;
+        const payload = {
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.7 }
+        };
+
+        const resp = await axios.post(url, payload, { timeout: 60000 });
+        const cand = resp?.data?.candidates?.[0];
+        const text = cand?.content?.parts?.[0]?.text || '';
+        const parsed = tryParseJson(text);
+
+        if (parsed && typeof parsed === 'object') {
+            return parsed;
+        }
+        throw new Error('Failed to parse Gemini response');
+    } catch (e) {
+        const errDetail = e.response?.data?.error?.message || e.message;
+        console.error('Gemini GD analysis error:', errDetail);
+        const base = buildHeuristicExtemporeAnalysis({ topic, durationSec, transcript });
+        return {
+            overallScore: base.overallScore,
+            communicationScore: base.fluencyScore,
+            knowledgeScore: base.contentScore,
+            participationScore: base.deliveryScore,
+            teamworkScore: base.structureScore,
+            strengths: base.strengths,
+            improvements: base.improvements,
+            feedback: `Analysis generated locally. Error: ${errDetail}`,
+            tips: base.practiceTopics
+        };
+    }
+}
+
+module.exports = { analyzeExtemporeWithGemini, analyzeGDParticipantWithGemini };
