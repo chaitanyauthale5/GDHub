@@ -36,7 +36,7 @@ const getAppParamValue = (paramName, { defaultValue = undefined, removeFromUrl =
 const getAppParams = () => {
 	return {
 		appId: getAppParamValue("app_id", { defaultValue: (typeof globalThis !== 'undefined' && globalThis['__APP_ID__']) || null }),
-		serverUrl: getAppParamValue("server_url", { defaultValue: (typeof globalThis !== 'undefined' && globalThis['__API_BASE_URL__']) || 'http://localhost:5000' }),
+		serverUrl: getAppParamValue("server_url", { defaultValue: (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL) || (typeof globalThis !== 'undefined' && globalThis['__API_BASE_URL__']) || 'http://localhost:5000' }),
 		token: getAppParamValue("access_token", { removeFromUrl: true }),
 		fromUrl: getAppParamValue("from_url", { defaultValue: window.location.href }),
 		functionsVersion: getAppParamValue("functions_version"),
