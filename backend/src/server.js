@@ -31,10 +31,13 @@ const AIInterviewSession = require('./models/AIInterviewSession');
 
 const authRoutes = require('./routes/auth');
 const tokenRoutes = require('./routes/token');
+const pushRoutes = require('./routes/push');
+const notificationsRoutes = require('./routes/notifications');
 const globalGdRoutes = require('./routes/globalGd');
 const extemporeGeminiRoutes = require('./routes/extemporeGemini');
 const aiAnalysisRoutes = require('./routes/aiAnalysis');
 const auth = require('./middleware/auth');
+const { sendPushToUser } = require('./utils/pushNotifications');
 
 const app = express();
 
@@ -90,7 +93,7 @@ app.use('/api/ai-analysis', aiAnalysisRoutes);
 app.use('/api/users', createCrudRouter(User));
 app.use('/api/user-profiles', createCrudRouter(UserProfile));
 app.use('/api/friend-requests', createCrudRouter(FriendRequest));
-app.use('/api/notifications', createCrudRouter(Notification));
+app.use('/api/notifications', notificationsRoutes);
 app.use('/api/tournaments', createCrudRouter(Tournament));
 app.use('/api/tournament-registrations', createCrudRouter(TournamentRegistration));
 app.use('/api/gd-rooms', createCrudRouter(GDRoom));
@@ -104,6 +107,7 @@ app.use('/api/extempore-topics', createCrudRouter(ExtemporeTopic));
 app.use('/api/extempore-messages', createCrudRouter(ExtemporeMessage));
 app.use('/api/solo-practice-sessions', createCrudRouter(SoloPracticeSession));
 app.use('/api/zego', tokenRoutes);
+app.use('/api/push', pushRoutes);
 app.use('/api/ai-interview-sessions', createCrudRouter(AIInterviewSession));
 
 app.post('/api/friend-requests/:id/accept', async (req, res) => {
@@ -121,7 +125,20 @@ app.post('/api/friend-requests/:id/accept', async (req, res) => {
         other.friends = Array.from(new Set([...(other.friends || []), fr.to_user_id]));
         await other.save();
     }
-    await Notification.create({ user_id: fr.from_user_id, type: 'friend_request', title: 'Friend Request Accepted', message: 'Your request was accepted', from_user_id: fr.to_user_id, is_read: false });
+    const notifDoc = await Notification.create({ user_id: fr.from_user_id, type: 'friend_request', title: 'Friend Request Accepted', message: 'Your request was accepted', from_user_id: fr.to_user_id, is_read: false });
+    try {
+        const io = req.app.get('io');
+        const plain = notifDoc?.toObject ? notifDoc.toObject() : notifDoc;
+        const payload = { ...plain, id: (plain?._id || plain?.id || '').toString(), created_date: plain?.createdAt || plain?.created_date || plain?.created_at };
+        if (io && payload.user_id) io.to(`user:${payload.user_id}`).emit('notification_created', { notification: payload });
+    } catch { }
+    try {
+        await sendPushToUser(fr.from_user_id, {
+            title: 'Friend Request Accepted',
+            body: 'Your request was accepted',
+            data: { type: 'friend_request', from_user_id: fr.to_user_id }
+        });
+    } catch { }
     res.json({ success: true });
 });
 
@@ -592,11 +609,54 @@ const start = async () => {
             io.to(roomName).emit('room_invite_notification', payload);
         });
 
-        socket.on('send_message', (data) => {
-            io.to(data.room).emit('receive_message', data);
-            if (data && data.to_user_id) {
-                const userRoom = `user:${data.to_user_id}`;
-                io.to(userRoom).emit('chat_message_notification', data);
+        socket.on('send_message', async (data, ack) => {
+            try {
+                const room = data && data.room;
+                const from_user_id = data && data.from_user_id;
+                const to_user_id = data && data.to_user_id;
+                const message = data && data.message;
+                const from_user_name = data && data.from_user_name;
+                if (!room || !from_user_id || !to_user_id || !message) {
+                    if (typeof ack === 'function') ack({ ok: false, error: 'missing_fields' });
+                    return;
+                }
+
+                // If client already persisted the message and provided id, accept it.
+                // Otherwise, persist here so sockets are the source of truth.
+                let doc = null;
+                if (data.id || data._id) {
+                    doc = data;
+                } else {
+                    const created = await ChatMessage.create({
+                        from_user_id: String(from_user_id),
+                        from_user_name: from_user_name || null,
+                        to_user_id: String(to_user_id),
+                        message: String(message),
+                        is_read: false,
+                    });
+                    const plain = created.toObject ? created.toObject() : created;
+                    doc = { ...plain, id: (plain._id || plain.id || '').toString() };
+                    delete doc._id;
+                    delete doc.__v;
+                }
+
+                const payload = { ...doc, room };
+
+                // Send to sender instantly
+                socket.emit('receive_message', payload);
+                // Send to everyone else in the room
+                socket.to(room).emit('receive_message', payload);
+
+                // For global UI unread badges
+                if (to_user_id) {
+                    const userRoom = `user:${to_user_id}`;
+                    io.to(userRoom).emit('chat_message_notification', payload);
+                }
+
+                if (typeof ack === 'function') ack({ ok: true, message: payload });
+            } catch (e) {
+                console.error('send_message error', e);
+                if (typeof ack === 'function') ack({ ok: false, error: 'server_error' });
             }
         });
 

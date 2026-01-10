@@ -31,14 +31,68 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
     loadNotifications();
   }, []);
 
+  const upsertNotification = (notif) => {
+    if (!notif) return;
+    const id = notif.id || notif._id;
+    if (!id) return;
+
+    setNotifications((prev) => {
+      const existed = (prev || []).some((n) => n.id === id);
+      const next = [{ ...notif, id }, ...(prev || []).filter((n) => n.id !== id)].slice(0, 50);
+      if (!existed && !notif.is_read) {
+        setUnreadCount((c) => c + 1);
+      }
+      return next;
+    });
+  };
+
+  const markNotificationReadLocal = (id) => {
+    if (!id) return;
+    setNotifications((prev) => {
+      let didChange = false;
+      const next = (prev || []).map((n) => {
+        if ((n.id || n._id) !== id) return n;
+        if (n.is_read) return n;
+        didChange = true;
+        return { ...n, is_read: true };
+      });
+      if (didChange) setUnreadCount((c) => Math.max(0, c - 1));
+      return next;
+    });
+  };
+
+  const removeNotificationsLocal = (predicate) => {
+    setNotifications((prev) => {
+      const kept = (prev || []).filter((n) => !predicate(n));
+      const nextUnread = kept.filter((n) => !n.is_read).length;
+      setUnreadCount(nextUnread);
+      return kept;
+    });
+  };
+
+  const upsertFriendRequest = (req) => {
+    if (!req) return;
+    const id = req.id || req._id;
+    if (!id) return;
+    if (req.status && req.status !== 'pending') return;
+
+    setFriendRequests((prev) => {
+      const next = [{ ...req, id }, ...(prev || []).filter((r) => r.id !== id)];
+      return next;
+    });
+  };
+
   useEffect(() => {
     if (!socket || !currentUser) return;
 
-    const handleFriendRequestNotification = () => {
-      loadNotifications();
+    const handleFriendRequestNotification = (payload) => {
+      if (!payload || payload.to_user_id !== currentUser.email) return;
+      if (payload.friend_request) upsertFriendRequest(payload.friend_request);
+      if (payload.notification) upsertNotification(payload.notification);
     };
-    const handleRoomInviteNotification = () => {
-      loadNotifications();
+    const handleRoomInviteNotification = (payload) => {
+      if (!payload || payload.to_user_id !== currentUser.email) return;
+      if (payload.notification) upsertNotification(payload.notification);
     };
     const handleChatMessageNotification = (payload) => {
       if (!payload || payload.to_user_id !== currentUser.email) return;
@@ -47,6 +101,12 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
         const key = payload.from_user_id;
         return { ...m, [key]: (m[key] || 0) + 1 };
       });
+    };
+
+    const handleNotificationCreated = (payload) => {
+      const n = payload?.notification;
+      if (!n || n.user_id !== currentUser.email) return;
+      upsertNotification(n);
     };
     const handleMessageRead = (payload = {}) => {
       if (payload.to_user_id !== currentUser.email) return;
@@ -61,12 +121,14 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
     socket.on('friend_request_notification', handleFriendRequestNotification);
     socket.on('room_invite_notification', handleRoomInviteNotification);
     socket.on('chat_message_notification', handleChatMessageNotification);
+    socket.on('notification_created', handleNotificationCreated);
     socket.on('message_read', handleMessageRead);
 
     return () => {
       socket.off('friend_request_notification', handleFriendRequestNotification);
       socket.off('room_invite_notification', handleRoomInviteNotification);
       socket.off('chat_message_notification', handleChatMessageNotification);
+      socket.off('notification_created', handleNotificationCreated);
       socket.off('message_read', handleMessageRead);
     };
   }, [socket, currentUser]);
@@ -168,12 +230,12 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
       is_read: false
     });
 
-    loadNotifications();
+    setFriendRequests((prev) => (prev || []).filter((r) => r.id !== request.id));
   };
 
   const rejectFriendRequest = async (request) => {
     await api.entities.FriendRequest.update(request.id, { status: 'rejected' });
-    loadNotifications();
+    setFriendRequests((prev) => (prev || []).filter((r) => r.id !== request.id));
   };
 
   const openChat = (friendId) => {
@@ -262,7 +324,8 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                                 try {
                                   const unread = await api.entities.Notification.filter({ user_id: currentUser.email, is_read: false });
                                   await Promise.all(unread.map(n => api.entities.Notification.update(n.id, { is_read: true })));
-                                  loadNotifications();
+                                  setNotifications((prev) => (prev || []).map((n) => ({ ...n, is_read: true })));
+                                  setUnreadCount(0);
                                 } catch {}
                               }}
                               className="text-xs font-bold text-blue-600 hover:underline"
@@ -277,7 +340,8 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                                 if (!me) return;
                                 const all = await api.entities.Notification.filter({ user_id: me.email });
                                 await Promise.all((all || []).map(n => api.entities.Notification.delete(n.id)));
-                                loadNotifications();
+                                setNotifications([]);
+                                setUnreadCount(0);
                               } catch {}
                             }}
                             className="text-xs font-bold text-red-600 hover:underline"
@@ -342,7 +406,7 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                                       try {
                                         const stillValid = await api.entities.Notification.filter({ id: notif.id });
                                         if (!stillValid || stillValid.length === 0) {
-                                          loadNotifications();
+                                          removeNotificationsLocal((n) => (n.id || n._id) === notif.id);
                                           return;
                                         }
                                         const me = await api.auth.me();
@@ -356,7 +420,7 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                                         }
                                         const allInvites = await api.entities.Notification.filter({ user_id: me.email, type: 'room_invite', room_id: room.id });
                                         await Promise.all((allInvites || []).map(n => api.entities.Notification.delete(n.id)));
-                                        loadNotifications();
+                                        removeNotificationsLocal((n) => n.type === 'room_invite' && (n.room_id === room.id || n.room_id === notif.room_id));
                                         if (room.status === 'lobby') {
                                           navigate(createPageUrl(`Lobby?roomId=${room.id}`));
 
@@ -374,7 +438,7 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                                   </button>
                                   {!notif.is_read && (
                                     <button
-                                      onClick={async () => { try { await api.entities.Notification.update(notif.id, { is_read: true }); loadNotifications(); } catch {} }}
+                                      onClick={async () => { try { await api.entities.Notification.update(notif.id, { is_read: true }); markNotificationReadLocal(notif.id); } catch {} }}
                                       className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs font-bold"
                                     >
                                       Mark read
@@ -385,7 +449,7 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
                               {notif.type !== 'room_invite' && !notif.is_read && (
                                 <div className="flex gap-2">
                                   <button
-                                    onClick={async () => { try { await api.entities.Notification.update(notif.id, { is_read: true }); loadNotifications(); } catch {} }}
+                                    onClick={async () => { try { await api.entities.Notification.update(notif.id, { is_read: true }); markNotificationReadLocal(notif.id); } catch {} }}
                                     className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs font-bold"
                                   >
                                     Mark read

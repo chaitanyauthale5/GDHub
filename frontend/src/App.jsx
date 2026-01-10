@@ -2,6 +2,7 @@ import { Toaster } from "@/components/ui/toaster"
 import UserNotRegisteredError from '@/components/UserNotRegisteredError'
 import { AuthProvider, useAuth } from '@/lib/AuthContext'
 import NavigationTracker from '@/lib/NavigationTracker'
+import PushNotificationsManager from '@/lib/PushNotificationsManager'
 import { queryClientInstance } from '@/lib/query-client'
 import { SocketProvider } from '@/lib/SocketContext'
 import VisualEditAgent from '@/lib/VisualEditAgent'
@@ -11,8 +12,8 @@ import './App.css'
 import AppFooter from './components/navigation/AppFooter'
 import PageNotFound from './lib/PageNotFound'
 import { pagesConfig } from './pages.config'
-import Global from './pages/Global'
 import FindingParticipants from './pages/FindingParticipants'
+import Global from './pages/Global'
 import GlobalLobby from './pages/GlobalLobby'
 
 const { Pages, Layout, mainPage } = pagesConfig;
@@ -119,6 +120,7 @@ function App() {
         <QueryClientProvider client={queryClientInstance}>
           <Router>
             <NavigationTracker />
+            <PushNotificationsManager />
             <AuthenticatedApp />
             <AppFooter />
           </Router>
