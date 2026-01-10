@@ -233,7 +233,14 @@ const auth = {
     if (redirectUrl) window.location.href = redirectUrl;
   },
   redirectToLogin() {
-    window.location.href = '/Login';
+    const current = (() => {
+      try {
+        return `${window.location.pathname || ''}${window.location.search || ''}${window.location.hash || ''}`;
+      } catch {
+        return '/';
+      }
+    })();
+    window.location.href = `/Login?redirect=${encodeURIComponent(current || '/')}`;
   },
 };
 
@@ -354,6 +361,10 @@ const aiAnalysis = {
 let api = { auth, entities, appLogs, integrations, zego, push, globalGd, aiAnalysis };
 const rooms = {
   gd: {
+    async join(id, args) {
+      const a = args || {};
+      return post(`/api/gd-rooms/${id}/join`, { user_id: a.user_id, user_name: a.user_name });
+    },
     async start(id, args) {
       const a = args || {};
       const headers = {};
