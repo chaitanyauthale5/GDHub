@@ -12,6 +12,10 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [gLoading, setGLoading] = useState(false);
 
+  const urlParams = new URLSearchParams(window.location.search);
+  const redirectParam = urlParams.get('redirect');
+  const redirect = (redirectParam && redirectParam.startsWith('/')) ? redirectParam : '/';
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -21,7 +25,7 @@ export default function Login() {
       if (!emailOk) throw new Error('Please enter a valid email');
       if (!password || password.length < 8) throw new Error('Password must be at least 8 characters');
       await api.auth.login({ email, password });
-      window.location.href = '/';
+      window.location.href = redirect;
     } catch (err) {
       setError(err.message || 'Login failed');
     } finally {
@@ -35,7 +39,7 @@ export default function Login() {
     try {
       const { idToken } = await signInWithGooglePopup();
       await api.auth.firebaseLogin({ idToken });
-      window.location.href = '/';
+      window.location.href = redirect;
     } catch (err) {
       setError(err.message || 'Google sign-in failed');
     } finally {
@@ -122,7 +126,7 @@ export default function Login() {
           </form>
           <p className="mt-4 text-sm text-center text-slate-300">
             Don't have an account?{' '}
-            <Link to="/Register" className="text-blue-400 hover:underline">Create one</Link>
+            <Link to={redirectParam ? `/Register?redirect=${encodeURIComponent(redirectParam)}` : '/Register'} className="text-blue-400 hover:underline">Create one</Link>
           </p>
         </div>
       </motion.div>

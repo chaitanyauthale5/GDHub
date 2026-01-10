@@ -10,9 +10,13 @@ const inferBase = () => {
     return 'http://localhost:5000';
   }
 };
+const viteEnv =
+  (typeof import.meta !== 'undefined' && import.meta && import.meta.env)
+    ? import.meta.env
+    : ((typeof import.meta !== 'undefined' && import.meta && import.meta['env']) ? import.meta['env'] : undefined);
 export const API_BASE_URL =
   // 1) Prefer build-time Vite env, shared across all devices
-  (typeof import.meta !== 'undefined' && import.meta && import.meta['env'] && import.meta['env'].VITE_API_BASE_URL)
+  (viteEnv && viteEnv.VITE_API_BASE_URL)
   // 2) Then any runtime override injected on window (set via localStorage api_base_url)
   || ((typeof globalThis !== 'undefined' && globalThis['__API_BASE_URL__']) || inferBase());
 
@@ -229,7 +233,14 @@ const auth = {
     if (redirectUrl) window.location.href = redirectUrl;
   },
   redirectToLogin() {
-    window.location.href = '/Login';
+    const current = (() => {
+      try {
+        return `${window.location.pathname || ''}${window.location.search || ''}${window.location.hash || ''}`;
+      } catch {
+        return '/';
+      }
+    })();
+    window.location.href = `/Login?redirect=${encodeURIComponent(current || '/')}`;
   },
 };
 
@@ -306,6 +317,24 @@ const zego = {
   },
 };
 
+const push = {
+  async subscribe(args) {
+    const a = /** @type {any} */ (args || {});
+    return post('/api/push/subscribe', { token: a.token, platform: a.platform || 'web', user_agent: a.user_agent });
+  },
+  async unsubscribe(args) {
+    const a = /** @type {any} */ (args || {});
+    return post('/api/push/unsubscribe', { token: a.token });
+  },
+  async status() {
+    return get('/api/push/status');
+  },
+  async test(args) {
+    const a = /** @type {any} */ (args || {});
+    return post('/api/push/test', { title: a.title, body: a.body, url: a.url });
+  },
+};
+
 const globalGd = {
   async join({ userId, name }) {
     return post('/api/global-gd/join', { userId, name });
@@ -329,9 +358,13 @@ const aiAnalysis = {
   },
 };
 
-let api = { auth, entities, appLogs, integrations, zego, globalGd, aiAnalysis };
+let api = { auth, entities, appLogs, integrations, zego, push, globalGd, aiAnalysis };
 const rooms = {
   gd: {
+    async join(id, args) {
+      const a = args || {};
+      return post(`/api/gd-rooms/${id}/join`, { user_id: a.user_id, user_name: a.user_name });
+    },
     async start(id, args) {
       const a = args || {};
       const headers = {};

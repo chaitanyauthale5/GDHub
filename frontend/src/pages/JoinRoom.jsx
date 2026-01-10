@@ -1,5 +1,4 @@
 import { api } from '@/api/apiClient';
-import { Input } from '@/components/ui/input';
 import { motion } from 'framer-motion';
 import { AlertTriangle, ArrowLeft, Hash, LogIn } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -15,13 +14,24 @@ export default function JoinRoom() {
   const [error, setError] = useState('');
   const [myHostedRoom, setMyHostedRoom] = useState(null);
 
+  const urlParams = new URLSearchParams(window.location.search);
+  const deepLinkRoomId = urlParams.get('roomId');
+
   useEffect(() => {
-    checkHostedRoom();
+    init();
   }, []);
+
+  const init = async () => {
+    const hosted = await checkHostedRoom();
+    if (deepLinkRoomId) {
+      await joinByRoomId(deepLinkRoomId, hosted);
+    }
+  };
 
   const checkHostedRoom = async () => {
     try {
       const user = await api.auth.me();
+      if (!user) return null;
       const hostedRooms = await api.entities.GDRoom.filter({
         host_id: user.email,
         status: 'lobby'
@@ -29,9 +39,65 @@ export default function JoinRoom() {
 
       if (hostedRooms.length > 0) {
         setMyHostedRoom(hostedRooms[0]);
+        return hostedRooms[0];
       }
+      return null;
     } catch (error) {
       console.error('Error checking hosted room:', error);
+      return null;
+    }
+  };
+
+  const joinByRoomId = async (roomId, hostedRoom) => {
+    if (!roomId) return;
+
+    // Check if user is hosting a room
+    if (hostedRoom) {
+      setError('You cannot join other rooms while hosting. Go to your lobby first.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const user = await api.auth.me();
+      if (!user) {
+        api.auth.redirectToLogin();
+        return;
+      }
+
+      const roomData = await api.entities.GDRoom.filter({ id: roomId });
+      if (!roomData || roomData.length === 0) {
+        setError('Room not found or already ended');
+        return;
+      }
+
+      const room = roomData[0];
+
+      if (room.status === 'completed') {
+        setError('This room has already ended');
+        return;
+      }
+
+      const joinedRoom = await api.rooms.gd.join(roomId, { user_id: user.email, user_name: user.full_name });
+      const effectiveRoomId = joinedRoom?.id || joinedRoom?._id || roomId;
+
+      if (joinedRoom?.status === 'active') {
+        navigate(createPageUrl(`Call?roomId=${effectiveRoomId}`));
+        return;
+      }
+
+      navigate(createPageUrl(`Lobby?roomId=${effectiveRoomId}`));
+    } catch (error) {
+      console.error('Error joining room:', error);
+      if (error && Number(error.status) === 409) {
+        setError('Room is full');
+      } else {
+        setError('Failed to join room');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -52,6 +118,10 @@ export default function JoinRoom() {
     
     try {
       const user = await api.auth.me();
+      if (!user) {
+        api.auth.redirectToLogin();
+        return;
+      }
       // Only find rooms that are in lobby status (not completed or old rooms)
       const rooms = await api.entities.GDRoom.filter({ 
         room_code: roomCode.toUpperCase(),
@@ -66,38 +136,28 @@ export default function JoinRoom() {
 
       // Get the most recent room with this code
       const room = rooms[0];
-
-      // Check if room is active (already started with ZEGOCLOUD call)
-      if (room.status === 'active') {
-        // Directly join the ongoing call
-        navigate(createPageUrl(`Call?roomId=${room.id}`));
-        return;
-      }
-
       if (room.status === 'completed') {
         setError('This room has already ended');
         setLoading(false);
         return;
       }
 
-      // Add user to participants if in lobby
-      const isAlreadyParticipant = room.participants?.some(p => p.user_id === user.email || p.user_id === user.id);
-      if (!isAlreadyParticipant) {
-        const updatedParticipants = [...(room.participants || []), {
-          user_id: user.email,
-          name: user.full_name,
-          joined_at: new Date().toISOString()
-        }];
+      const joinedRoom = await api.rooms.gd.join(room.id, { user_id: user.email, user_name: user.full_name });
+      const effectiveRoomId = joinedRoom?.id || joinedRoom?._id || room.id;
 
-        await api.entities.GDRoom.update(room.id, {
-          participants: updatedParticipants
-        });
+      if (joinedRoom?.status === 'active' || room.status === 'active') {
+        navigate(createPageUrl(`Call?roomId=${effectiveRoomId}`));
+        return;
       }
 
-      navigate(createPageUrl(`Lobby?roomId=${room.id}`));
+      navigate(createPageUrl(`Lobby?roomId=${effectiveRoomId}`));
     } catch (error) {
       console.error('Error joining room:', error);
-      setError('Failed to join room');
+      if (error && Number(error.status) === 409) {
+        setError('Room is full');
+      } else {
+        setError('Failed to join room');
+      }
     } finally {
       setLoading(false);
     }
@@ -153,7 +213,7 @@ export default function JoinRoom() {
                   <Hash className="w-5 h-5 text-purple-600" />
                   Room Code
                 </label>
-              <Input
+              <input
                 type="text"
                 value={roomCode}
                 onChange={(e) => {

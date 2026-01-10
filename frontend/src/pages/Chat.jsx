@@ -23,6 +23,14 @@ export default function Chat() {
   const socket = useSocket();
   const [deleting, setDeleting] = useState({});
 
+  const makeClientId = () => {
+    try {
+      return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    } catch {
+      return String(Date.now());
+    }
+  };
+
   useEffect(() => {
     loadData();
     // const interval = setInterval(loadMessages, 3000);
@@ -39,11 +47,33 @@ export default function Chat() {
         (newMessage.from_user_id === friendKey && newMessage.to_user_id === user.email) ||
         (newMessage.from_user_id === user.email && newMessage.to_user_id === friendKey)
       ) {
-        setMessages((prev) => [...prev, newMessage]);
+        const incomingId = newMessage?.id || newMessage?._id;
+        const incomingClientId = newMessage?.client_id;
+
+        setMessages((prev) => {
+          const list = prev || [];
+          // If the incoming message is a confirmation of our optimistic message, replace it.
+          if (incomingClientId) {
+            const idx = list.findIndex((m) => m.client_id && m.client_id === incomingClientId);
+            if (idx !== -1) {
+              const next = [...list];
+              next[idx] = { ...newMessage, id: incomingId || next[idx].id };
+              return next;
+            }
+          }
+          // Deduplicate by id
+          if (incomingId && list.some((m) => (m.id || m._id) === incomingId)) {
+            return list;
+          }
+          return [...list, { ...newMessage, id: incomingId || newMessage?.id }];
+        });
+
         if (newMessage.from_user_id === friendKey) {
-          api.entities.ChatMessage.update(newMessage.id, { is_read: true })
+          const idToMark = incomingId;
+          if (!idToMark || String(idToMark).startsWith('local:')) return;
+          api.entities.ChatMessage.update(idToMark, { is_read: true })
             .then(() => {
-              try { socket.emit('message_read', { message_id: newMessage.id, from_user_id: friendKey, to_user_id: user.email }); } catch {}
+              try { socket.emit('message_read', { message_id: idToMark, from_user_id: friendKey, to_user_id: user.email }); } catch {}
             })
             .catch(() => {});
         }
@@ -118,37 +148,79 @@ export default function Chat() {
     if (!inputMessage.trim() || !user || !friend) return;
 
     const peerId = friendKey || friend.email || friendId;
+    const roomId = [user.email, peerId].sort().join('_');
+    const clientId = makeClientId();
 
     const msgData = {
       from_user_id: user.email,
       from_user_name: user.full_name,
       to_user_id: peerId,
       message: inputMessage,
-      is_read: false
+      is_read: false,
+      client_id: clientId,
     };
 
-    // Optimistic update (optional, but good for UX)
-    // setMessages(prev => [...prev, { ...msgData, created_date: new Date().toISOString() }]);
+    // Optimistic update (instant UI)
+    setMessages((prev) => ([
+      ...(prev || []),
+      {
+        ...msgData,
+        id: `local:${clientId}`,
+        created_date: new Date().toISOString(),
+      }
+    ]));
 
     try {
-      const savedMsg = await api.entities.ChatMessage.create(msgData);
-
       if (socket) {
-        const roomId = [user.email, peerId].sort().join('_');
-        socket.emit('send_message', { ...savedMsg, room: roomId });
+        socket.emit('send_message', { ...msgData, room: roomId }, (ack) => {
+          if (!ack || !ack.ok || !ack.message) return;
+          const serverMsg = ack.message;
+          const serverId = serverMsg.id || serverMsg._id;
+          setMessages((prev) => {
+            const list = prev || [];
+            const idx = list.findIndex((m) => m.client_id === clientId);
+            if (idx !== -1) {
+              const next = [...list];
+              next[idx] = { ...serverMsg, id: serverId || next[idx].id };
+              return next;
+            }
+            if (serverId && list.some((m) => (m.id || m._id) === serverId)) return list;
+            return [...list, { ...serverMsg, id: serverId || serverMsg.id }];
+          });
+        });
       } else {
-        // Fallback if socket fails
-        await loadMessages(user, peerId);
+        // Fallback if socket fails (persist via API)
+        const savedMsg = await api.entities.ChatMessage.create({
+          from_user_id: msgData.from_user_id,
+          from_user_name: msgData.from_user_name,
+          to_user_id: msgData.to_user_id,
+          message: msgData.message,
+          is_read: false,
+        });
+        const savedId = savedMsg?.id || savedMsg?._id;
+        setMessages((prev) => {
+          const list = prev || [];
+          const idx = list.findIndex((m) => m.client_id === clientId);
+          if (idx !== -1) {
+            const next = [...list];
+            next[idx] = { ...savedMsg, id: savedId || next[idx].id };
+            return next;
+          }
+          return list;
+        });
       }
 
       setInputMessage('');
     } catch (err) {
       console.error("Failed to send", err);
+      // Roll back optimistic message on failure
+      setMessages((prev) => (prev || []).filter((m) => m.client_id !== clientId));
     }
   };
 
   const deleteMessage = async (id) => {
     if (!id) return;
+    if (String(id).startsWith('local:')) return;
     setDeleting(prev => ({ ...prev, [id]: true }));
     try {
       await api.entities.ChatMessage.delete(id);
