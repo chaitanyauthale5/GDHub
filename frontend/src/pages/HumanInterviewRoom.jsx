@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { api } from '@/api/apiClient';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
-import { api } from '@/api/apiClient';
-import { motion } from 'framer-motion';
 
-import { Users, Clock, ArrowLeft, LogOut, Copy, Check } from 'lucide-react';
+import useZegoCall from '@/hooks/useZegoCall';
+import { AlertCircle, ArrowLeft, Check, Clock, Copy, LogOut, Mic, MicOff, Users, Video, VideoOff } from 'lucide-react';
 
 export default function HumanInterviewRoom() {
   const navigate = useNavigate();
@@ -15,16 +15,11 @@ export default function HumanInterviewRoom() {
   const [room, setRoom] = useState(null);
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [copied, setCopied] = useState(false);
-  const jitsiContainerRef = useRef(null);
-  const apiRef = useRef(null);
+  const [localVideoEl, setLocalVideoEl] = useState(null);
+  const [remoteVideoEls, setRemoteVideoEls] = useState({});
 
   useEffect(() => {
     loadData();
-    return () => {
-      if (apiRef.current) {
-        apiRef.current.dispose();
-      }
-    };
   }, []);
 
   useEffect(() => {
@@ -36,11 +31,22 @@ export default function HumanInterviewRoom() {
     }
   }, [room]);
 
-  useEffect(() => {
-    if (room && user && jitsiContainerRef.current && !apiRef.current) {
-      initJitsi();
-    }
-  }, [room, user]);
+  const zegoRoomId = room?.room_code ? `ai_interview_${room.room_code}` : null;
+
+  const {
+    localStream,
+    remoteStreams,
+    micOn,
+    cameraOn,
+    toggleMic,
+    toggleCamera,
+    mediaError,
+    retryDevices,
+    leaveRoom,
+    isJoined,
+    isJoining,
+    attachStreamToVideoElement,
+  } = useZegoCall({ roomId: zegoRoomId, user, autoJoin: true, canPublish: true });
 
   const loadData = async () => {
     try {
@@ -60,43 +66,24 @@ export default function HumanInterviewRoom() {
     }
   };
 
-  const initJitsi = () => {
-    const script = document.createElement('script');
-    script.src = 'https://meet.jit.si/external_api.js';
-    script.async = true;
-    script.onload = () => {
-      apiRef.current = new window.JitsiMeetExternalAPI('meet.jit.si', {
-        roomName: `SpeakUp_Interview_${room.room_code}`,
-        parentNode: jitsiContainerRef.current,
-        userInfo: {
-          displayName: user.full_name,
-          email: user.email
-        },
-        configOverwrite: {
-          startWithAudioMuted: false,
-          startWithVideoMuted: false,
-          prejoinPageEnabled: false
-        },
-        interfaceConfigOverwrite: {
-          TOOLBAR_BUTTONS: [
-            'microphone', 'camera', 'closedcaptions', 'desktop',
-            'fullscreen', 'fodeviceselection', 'chat', 'raisehand',
-            'videoquality', 'filmstrip', 'tileview', 'settings'
-          ],
-          SHOW_JITSI_WATERMARK: false,
-          SHOW_WATERMARK_FOR_GUESTS: false
-        }
-      });
-    };
-    document.body.appendChild(script);
-  };
+  useEffect(() => {
+    if (localVideoEl && localStream) {
+      attachStreamToVideoElement(localVideoEl, localStream, { muted: true });
+    }
+  }, [localVideoEl, localStream, attachStreamToVideoElement]);
+
+  useEffect(() => {
+    Object.entries(remoteStreams || {}).forEach(([streamID, stream]) => {
+      const el = remoteVideoEls[streamID];
+      if (el && stream) {
+        attachStreamToVideoElement(el, stream, { muted: false });
+      }
+    });
+  }, [remoteStreams, remoteVideoEls, attachStreamToVideoElement]);
 
   const endInterview = async () => {
     try {
-      if (apiRef.current) {
-        apiRef.current.dispose();
-        apiRef.current = null;
-      }
+      try { await leaveRoom(); } catch { }
       if (roomId) {
         await api.entities.AIInterview.update(roomId, { status: 'completed' });
       }
@@ -177,8 +164,87 @@ export default function HumanInterviewRoom() {
         </p>
       </div>
 
-      {/* Jitsi Container */}
-      <div ref={jitsiContainerRef} className="flex-1" />
+      {/* ZegoCloud Meeting */}
+      <div className="flex-1 p-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 bg-gray-900">
+        <div className="relative rounded-xl overflow-hidden bg-gray-800 aspect-video">
+          {localStream ? (
+            <video
+              ref={setLocalVideoEl}
+              data-self="true"
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
+              {mediaError ? 'Mic/Camera blocked or unavailable' : isJoining ? 'Connecting…' : 'Waiting to join…'}
+            </div>
+          )}
+          <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded">
+            You
+          </div>
+        </div>
+
+        {Object.entries(remoteStreams || {}).map(([streamID]) => (
+          <div key={streamID} className="relative rounded-xl overflow-hidden bg-gray-800 aspect-video">
+            <video
+              ref={(el) => {
+                if (!el) return;
+                setRemoteVideoEls((prev) => (prev[streamID] === el ? prev : { ...prev, [streamID]: el }));
+              }}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 text-white text-xs rounded">
+              {streamID}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {mediaError && (
+        <div className="bg-red-600 text-white text-sm px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" />
+            <span>{String(mediaError)}</span>
+          </div>
+          <button
+            onClick={retryDevices}
+            className="text-xs font-bold px-3 py-1 rounded bg-white/10 hover:bg-white/20"
+          >
+            Retry Devices
+          </button>
+        </div>
+      )}
+
+      <div className="bg-gray-800 px-4 py-3 flex items-center gap-4 justify-center flex-shrink-0">
+        <button
+          onClick={toggleMic}
+          disabled={!isJoined}
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all ${
+            micOn ? 'bg-green-600 text-white' : 'bg-gray-600 text-white'
+          } disabled:opacity-60`}
+        >
+          {micOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+          <span>{micOn ? 'Mic On' : 'Mic Off'}</span>
+        </button>
+
+        <button
+          onClick={toggleCamera}
+          disabled={!isJoined}
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all ${
+            cameraOn ? 'bg-blue-600 text-white' : 'bg-gray-600 text-white'
+          } disabled:opacity-60`}
+        >
+          {cameraOn ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
+          <span>{cameraOn ? 'Camera On' : 'Camera Off'}</span>
+        </button>
+
+        <button
+          onClick={endInterview}
+          className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold bg-red-600 hover:bg-red-700 text-white"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Exit</span>
+        </button>
+      </div>
     </div>
   );
 }
