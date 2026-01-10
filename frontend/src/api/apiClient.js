@@ -10,9 +10,13 @@ const inferBase = () => {
     return 'http://localhost:5000';
   }
 };
+const viteEnv =
+  (typeof import.meta !== 'undefined' && import.meta && import.meta.env)
+    ? import.meta.env
+    : ((typeof import.meta !== 'undefined' && import.meta && import.meta['env']) ? import.meta['env'] : undefined);
 export const API_BASE_URL =
   // 1) Prefer build-time Vite env, shared across all devices
-  (typeof import.meta !== 'undefined' && import.meta && import.meta['env'] && import.meta['env'].VITE_API_BASE_URL)
+  (viteEnv && viteEnv.VITE_API_BASE_URL)
   // 2) Then any runtime override injected on window (set via localStorage api_base_url)
   || ((typeof globalThis !== 'undefined' && globalThis['__API_BASE_URL__']) || inferBase());
 
