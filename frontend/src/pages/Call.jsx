@@ -391,6 +391,9 @@ export default function Call() {
     const poll = async () => {
       try {
         const data = await api.entities.GDRoom.filter({ id: roomId });
+        if (Array.isArray(data) && data.length > 0) {
+          setRoom(data[0]);
+        }
         if (data.length > 0 && data[0].status === 'completed' && !didEndRef.current) {
           didEndRef.current = true;
           try { await finalizeRecording({ download: true }); } catch {}
@@ -545,6 +548,13 @@ export default function Call() {
           <div>userID: {diagnostics.userID || (user?.email || user?.id || '—')}</div>
           <div>state: {diagnostics.roomState}</div>
         </div>
+      </div>
+
+      <div className="bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2 text-center flex-shrink-0">
+        <p className="text-white text-sm">
+          <span className="opacity-80">Topic Name:</span>{' '}
+          <span className="font-bold">{room?.topic || '—'}</span>
+        </p>
       </div>
 
       {/* Video grid */}
