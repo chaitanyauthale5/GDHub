@@ -14,7 +14,7 @@
       // You can run in console: localStorage.setItem('api_base_url','https://your-backend.ngrok.app')
       (function () {
         try {
-          var v = localStorage.getItem('api_base_url');
+          var v = localStorage.getItem('api_base_url','https://gdhub.onrender.com');
           if (v) window.__API_BASE_URL__ = v;
         } catch (e) {}
       })();
