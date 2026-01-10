@@ -13,6 +13,12 @@ const router = express.Router();
 router.use(cookieParser());
 
 const signToken = (user) => jwt.sign({ id: user._id.toString(), email: user.email }, config.jwtSecret, { expiresIn: '7d' });
+// Configure cookie attributes for cross-site usage (Vercel frontend -> Render backend)
+const cookieOpts = {
+    httpOnly: true,
+    sameSite: config.nodeEnv === 'production' ? 'none' : 'lax',
+    secure: config.nodeEnv === 'production'
+};
 
 router.post('/register', async (req, res) => {
     try {
@@ -24,7 +30,7 @@ router.post('/register', async (req, res) => {
         const user = await User.create({ email, passwordHash, full_name });
         await UserProfile.create({ user_id: user.email });
         const token = signToken(user);
-        res.cookie('token', token, { httpOnly: true, sameSite: 'lax' });
+        res.cookie('token', token, cookieOpts);
         res.json({ token, user: { id: user._id.toString(), email: user.email, full_name: user.full_name, avatar: user.avatar, xp_points: user.xp_points, level: user.level } });
     } catch (e) {
         res.status(500).json({ message: 'Server error' });
@@ -40,7 +46,7 @@ router.post('/login', async (req, res) => {
         const ok = await bcrypt.compare(password, user.passwordHash);
         if (!ok) return res.status(401).json({ message: 'Invalid credentials' });
         const token = signToken(user);
-        res.cookie('token', token, { httpOnly: true, sameSite: 'lax' });
+        res.cookie('token', token, cookieOpts);
         res.json({ token, user: { id: user._id.toString(), email: user.email, full_name: user.full_name, avatar: user.avatar, xp_points: user.xp_points, level: user.level } });
     } catch (e) {
         res.status(500).json({ message: 'Server error' });
@@ -72,7 +78,7 @@ router.post('/firebase', async (req, res) => {
             }
         }
         const token = signToken(user);
-        res.cookie('token', token, { httpOnly: true, sameSite: 'lax' });
+        res.cookie('token', token, cookieOpts);
         res.json({ token, user: { id: user._id.toString(), email: user.email, full_name: user.full_name, avatar: user.avatar, xp_points: user.xp_points, level: user.level } });
     } catch (e) {
         console.error('Firebase verify error:', e);
@@ -82,7 +88,7 @@ router.post('/firebase', async (req, res) => {
 });
 
 router.post('/logout', auth, async (req, res) => {
-    res.clearCookie('token');
+    res.clearCookie('token', cookieOpts);
     res.json({ success: true });
 });
 

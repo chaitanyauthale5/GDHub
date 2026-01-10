@@ -41,8 +41,34 @@ const app = express();
 const corsOptions = {
     origin: (origin, cb) => {
         if (!origin) return cb(null, true);
-        if (config.corsOrigins.includes(origin)) return cb(null, true);
-        return cb(null, false);
+        // Allow exact matches or wildcard hosts like *.vercel.app when configured
+        const allowed = (config.corsOrigins || []);
+        const isAllowed = () => {
+            if (allowed.includes(origin)) return true;
+            try {
+                const o = new URL(origin);
+                const host = o.hostname;
+                return allowed.some((pat) => {
+                    if (!pat) return false;
+                    if (pat === origin) return true;
+                    // Support host wildcard patterns like *.vercel.app
+                    if (pat.startsWith('*.')) {
+                        const suffix = pat.slice(1); // remove leading '*'
+                        return host.endsWith(suffix);
+                    }
+                    try {
+                        // If a full origin was configured (with protocol), compare origins
+                        const p = new URL(pat);
+                        return p.origin === origin;
+                    } catch {
+                        return false;
+                    }
+                });
+            } catch {
+                return false;
+            }
+        };
+        return isAllowed() ? cb(null, true) : cb(null, false);
     },
     credentials: true
 };
