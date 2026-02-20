@@ -1,5 +1,5 @@
 import { api } from '@/api/apiClient';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, ArrowRight, BookOpen, Clock, Plus, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -18,7 +18,9 @@ export default function CreateRoom() {
   const [formData, setFormData] = useState({
     teamSize: 4,
     domain: 'technology',
-    duration: 15
+    duration: 15,
+    topicType: 'random',
+    customTopic: ''
   });
 
   useEffect(() => {
@@ -44,9 +46,19 @@ export default function CreateRoom() {
   const handleCreate = async () => {
     if (!user) return;
     
+    // Validation for custom topic
+    if (formData.topicType === 'custom' && (!formData.customTopic.trim() || formData.customTopic.trim().length < 5)) {
+      alert('Please enter a custom topic with at least 5 characters');
+      return;
+    }
+    
     setLoading(true);
     try {
       const roomCode = generateRoomCode();
+      const topic = formData.topicType === 'custom' && formData.customTopic.trim() 
+        ? formData.customTopic.trim() 
+        : getRandomTopic(formData.domain);
+        
       const room = await api.entities.GDRoom.create({
         room_code: roomCode,
         host_id: user.email, // Explicitly set host_id to current user email
@@ -60,7 +72,7 @@ export default function CreateRoom() {
           name: user.full_name,
           joined_at: new Date().toISOString()
         }],
-        topic: getRandomTopic(formData.domain)
+        topic: topic
       });
 
       navigate(createPageUrl(`Lobby?roomId=${room.id}`));
@@ -207,6 +219,67 @@ export default function CreateRoom() {
                 ))}
               </select>
             </div>
+
+            {/* Topic Type Selection */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
+                <Plus className="w-5 h-5 text-purple-600" />
+                Topic Selection
+              </label>
+              <div className="space-y-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="topicType"
+                    value="random"
+                    checked={formData.topicType === 'random'}
+                    onChange={(e) => setFormData({ ...formData, topicType: e.target.value })}
+                    className="w-4 h-4 text-purple-600"
+                  />
+                  <span className="text-gray-700">Use random topic from {formData.domain}</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="topicType"
+                    value="custom"
+                    checked={formData.topicType === 'custom'}
+                    onChange={(e) => setFormData({ ...formData, topicType: e.target.value })}
+                    className="w-4 h-4 text-purple-600"
+                  />
+                  <span className="text-gray-700">Write my own topic</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Custom Topic Input */}
+            <AnimatePresence>
+              {formData.topicType === 'custom' && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div>
+                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
+                      <BookOpen className="w-5 h-5 text-purple-600" />
+                      Custom Topic
+                    </label>
+                    <textarea
+                      value={formData.customTopic}
+                      onChange={(e) => setFormData({ ...formData, customTopic: e.target.value })}
+                      placeholder="Enter your custom GD topic here..."
+                      className="clay-card border-none w-full px-4 py-3 rounded-2xl resize-none h-24 text-lg"
+                      maxLength={500}
+                    />
+                    <div className="text-right text-sm text-gray-500 mt-1">
+                      {formData.customTopic.length}/500 characters
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Duration */}
             <div>

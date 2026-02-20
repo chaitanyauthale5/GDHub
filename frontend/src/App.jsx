@@ -1,3 +1,4 @@
+import { Toaster as SonnerToaster } from "@/components/ui/sonner"
 import { Toaster } from "@/components/ui/toaster"
 import UserNotRegisteredError from '@/components/UserNotRegisteredError'
 import { AuthProvider, useAuth } from '@/lib/AuthContext'
@@ -7,7 +8,8 @@ import { queryClientInstance } from '@/lib/query-client'
 import { SocketProvider } from '@/lib/SocketContext'
 import VisualEditAgent from '@/lib/VisualEditAgent'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { Route, BrowserRouter as Router, Routes, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Route, BrowserRouter as Router, Routes, useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
 import AppFooter from './components/navigation/AppFooter'
 import PageNotFound from './lib/PageNotFound'
@@ -112,6 +114,43 @@ const AuthenticatedApp = () => {
 };
 
 
+// Component to handle service worker messages for navigation
+const ServiceWorkerNavigator = () => {
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    const handleMessage = (event) => {
+      if (event.data && event.data.type === 'NAVIGATE') {
+        const url = event.data.url;
+        if (url) {
+          // Extract path from URL (remove origin if present)
+          const path = url.startsWith('http') 
+            ? new URL(url).pathname + new URL(url).search
+            : url;
+          navigate(path);
+        }
+      }
+    };
+
+    // Listen for messages from service worker
+    navigator.serviceWorker?.addEventListener('message', handleMessage);
+    
+    // Also handle if service worker is already controlling
+    if (navigator.serviceWorker?.controller) {
+      navigator.serviceWorker.controller.addEventListener('message', handleMessage);
+    }
+
+    return () => {
+      navigator.serviceWorker?.removeEventListener('message', handleMessage);
+      if (navigator.serviceWorker?.controller) {
+        navigator.serviceWorker.controller.removeEventListener('message', handleMessage);
+      }
+    };
+  }, [navigate]);
+
+  return null;
+};
+
 function App() {
 
   return (
@@ -119,12 +158,14 @@ function App() {
       <SocketProvider>
         <QueryClientProvider client={queryClientInstance}>
           <Router>
+            <ServiceWorkerNavigator />
             <NavigationTracker />
             <PushNotificationsManager />
             <AuthenticatedApp />
             <AppFooter />
           </Router>
           <Toaster />
+          <SonnerToaster />
           <VisualEditAgent />
         </QueryClientProvider>
       </SocketProvider>

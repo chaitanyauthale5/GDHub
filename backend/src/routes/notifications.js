@@ -46,30 +46,82 @@ router.post('/', async (req, res) => {
     try {
         const userId = plain?.user_id;
         if (userId) {
-            const defaultUrl = '/Dashboard';
+            const notificationType = plain.type || '';
+            let targetUrl = '/Dashboard';
+            let actions = [
+                { action: 'open', title: 'Open' },
+                { action: 'dismiss', title: 'Dismiss' },
+            ];
+            let actionUrls = { open: targetUrl };
+
+            // Determine target URL and actions based on notification type
+            switch (notificationType) {
+                case 'chat_message':
+                    targetUrl = plain.from_user_id 
+                        ? `/Chat?friendId=${encodeURIComponent(plain.from_user_id)}` 
+                        : '/Chat';
+                    actions = [
+                        { action: 'open', title: 'View Message' },
+                        { action: 'dismiss', title: 'Dismiss' },
+                    ];
+                    actionUrls = { open: targetUrl };
+                    break;
+                case 'friend_request':
+                    targetUrl = plain.from_user_id 
+                        ? `/UserProfile?userId=${encodeURIComponent(plain.from_user_id)}` 
+                        : '/Dashboard';
+                    actions = [
+                        { action: 'accept', title: 'Accept' },
+                        { action: 'view', title: 'View Profile' },
+                        { action: 'dismiss', title: 'Dismiss' },
+                    ];
+                    actionUrls = {
+                        accept: targetUrl + '&action=accept',
+                        view: targetUrl,
+                    };
+                    break;
+                case 'room_invite':
+                    targetUrl = plain.room_id 
+                        ? `/JoinRoom?roomId=${encodeURIComponent(plain.room_id)}` 
+                        : '/BrowseRooms';
+                    actions = [
+                        { action: 'join', title: 'Join Room' },
+                        { action: 'view', title: 'View Rooms' },
+                        { action: 'dismiss', title: 'Dismiss' },
+                    ];
+                    actionUrls = {
+                        join: targetUrl,
+                        view: '/BrowseRooms',
+                    };
+                    break;
+                default:
+                    // Default URL from notification or Dashboard
+                    targetUrl = plain.url || '/Dashboard';
+                    actionUrls = { open: targetUrl };
+            }
+
             await sendPushToUser(userId, {
                 title: plain.title || 'SpeakUp',
                 body: plain.message || '',
-                url: defaultUrl,
+                url: targetUrl,
                 icon: '/logo.png',
                 badge: '/logo.png',
-                requireInteraction: true,
-                actions: [
-                    { action: 'open_admin', title: 'Open Admin' },
-                    { action: 'dismiss', title: 'Dismiss' },
-                ],
-                actionUrls: {
-                    open_admin: defaultUrl,
-                },
+                tag: `notification-${plain.id}`,
+                priority: 'high',
+                requireInteraction: notificationType === 'friend_request' || notificationType === 'room_invite',
+                actions,
+                actionUrls,
                 data: {
                     notificationId: plain.id,
-                    type: plain.type || '',
+                    type: notificationType,
                     room_id: plain.room_id || '',
                     from_user_id: plain.from_user_id || '',
                 }
             });
         }
-    } catch { }
+    } catch (pushError) {
+        console.error('[push] Failed to send push notification:', pushError);
+    }
 
     res.status(201).json(plain);
 });

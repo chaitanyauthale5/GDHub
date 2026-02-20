@@ -351,7 +351,22 @@ const aiAnalysis = {
   },
 };
 
-let api = { auth, entities, appLogs, integrations, zego, push, globalGd, aiAnalysis };
+const gdTopics = {
+  async getCategories() {
+    return get('/api/gd-topics/categories');
+  },
+  async getHeadlines() {
+    return get('/api/gd-topics/headlines');
+  },
+  async generateTopics() {
+    return get('/api/gd-topics/generate-topics');
+  },
+  async getCommunicationArticles() {
+    return get('/api/gd-topics/communication-articles');
+  },
+};
+
+let api = { auth, entities, appLogs, integrations, zego, push, globalGd, aiAnalysis, gdTopics };
 const rooms = {
   gd: {
     async start(id, args) {

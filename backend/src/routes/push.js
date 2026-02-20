@@ -66,28 +66,64 @@ router.get('/status', auth, async (req, res) => {
 
 router.post('/test', auth, async (req, res) => {
     try {
-        const { title, body, url } = req.body || {};
+        const { title, body, url, image, icon, badge, actions, actionUrls, requireInteraction } = req.body || {};
+        
+        // Default values that match the screenshot style
+        const defaultTitle = title || 'New message: SpeakUp';
+        const defaultBody = body || `Test notification • ${new Date().toLocaleTimeString()} • ${new Date().toLocaleDateString()}`;
+        const defaultUrl = url || '/Dashboard';
+        const defaultIcon = icon || '/logo.png';
+        const defaultBadge = badge || '/logo.png';
+        const defaultImage = image || undefined; // Optional large image
+        
         const result = await sendPushToUser(req.user.email, {
-            title: title || 'Test Notification',
-            body: body || 'This is a test web push from SpeakUp.',
-            url: url || '/Dashboard',
-            icon: '/logo.png',
-            badge: '/logo.png',
-            requireInteraction: true,
-            actions: [
-                { action: 'open_admin', title: 'Open Admin' },
+            title: defaultTitle,
+            body: defaultBody,
+            url: defaultUrl,
+            icon: defaultIcon,
+            badge: defaultBadge,
+            image: defaultImage,
+            tag: `test-${Date.now()}`, // Unique tag for test notifications
+            priority: 'high',
+            requireInteraction: (requireInteraction === true) || String(requireInteraction || '') === 'true',
+            actions: actions || [
+                { action: 'open', title: 'Open Admin' },
                 { action: 'dismiss', title: 'Dismiss' },
             ],
-            actionUrls: { open_admin: url || '/Dashboard' },
+            actionUrls: actionUrls || { 
+                open: defaultUrl,
+            },
             data: {
                 type: 'test',
                 ts: String(Date.now()),
+                url: defaultUrl,
             }
         });
-        res.json({ success: true, result });
+        
+        if (result && result.success) {
+            console.log(`[push] Test notification sent to ${req.user.email}: ${result.sent} delivered`);
+            res.json({ 
+                success: true, 
+                result,
+                message: `Notification sent successfully! ${result.sent} notification(s) delivered.`
+            });
+            return;
+        }
+        
+        console.warn(`[push] Test notification failed for ${req.user.email}:`, result?.reason || 'unknown');
+        res.status(500).json({ 
+            success: false, 
+            result,
+            message: result?.reason === 'no_tokens' 
+                ? 'No push tokens registered. Please ensure notifications are enabled.' 
+                : 'Failed to send test notification'
+        });
     } catch (e) {
-        console.error('push test error', e);
-        res.status(500).json({ message: 'Failed to send test push', error: e?.message || String(e) });
+        console.error('[push] Test notification error:', e);
+        res.status(500).json({ 
+            message: 'Failed to send test push', 
+            error: e?.message || String(e) 
+        });
     }
 });
 

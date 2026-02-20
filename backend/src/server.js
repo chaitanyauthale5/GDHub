@@ -36,6 +36,7 @@ const notificationsRoutes = require('./routes/notifications');
 const globalGdRoutes = require('./routes/globalGd');
 const extemporeGeminiRoutes = require('./routes/extemporeGemini');
 const aiAnalysisRoutes = require('./routes/aiAnalysis');
+const gdTopicsRoutes = require('./routes/gdTopics');
 const auth = require('./middleware/auth');
 const { sendPushToUser } = require('./utils/pushNotifications');
 
@@ -89,6 +90,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/global-gd', globalGdRoutes);
 app.use('/api/extempore', extemporeGeminiRoutes);
 app.use('/api/ai-analysis', aiAnalysisRoutes);
+app.use('/api/gd-topics', gdTopicsRoutes);
 
 app.use('/api/users', createCrudRouter(User));
 app.use('/api/user-profiles', createCrudRouter(UserProfile));
@@ -597,16 +599,96 @@ const start = async () => {
             console.log(`User ${socket.id} registered room ${roomName}`);
         });
 
-        socket.on('friend_request_notification', (payload) => {
+        socket.on('friend_request_notification', async (payload) => {
             if (!payload || !payload.to_user_id) return;
             const roomName = `user:${payload.to_user_id}`;
+            
+            // Send socket notification
             io.to(roomName).emit('friend_request_notification', payload);
+            
+            // Send push notification
+            try {
+                const socketsInRoom = await io.in(roomName).fetchSockets();
+                const isUserOnline = socketsInRoom && socketsInRoom.length > 0;
+                
+                if (!isUserOnline || payload.forcePush) {
+                    await sendPushToUser(payload.to_user_id, {
+                        title: payload.notification?.title || 'New Friend Request',
+                        body: payload.notification?.message || payload.message || `${payload.from_user_name || payload.from_user_id} sent you a friend request`,
+                        url: `/UserProfile?userId=${encodeURIComponent(payload.from_user_id)}`,
+                        icon: '/logo.png',
+                        badge: '/logo.png',
+                        tag: `friend_request-${payload.from_user_id}`,
+                        priority: 'high',
+                        data: {
+                            type: 'friend_request',
+                            from_user_id: payload.from_user_id,
+                            from_user_name: payload.from_user_name,
+                            to_user_id: payload.to_user_id,
+                            notification_id: payload.notification?.id,
+                            friend_request_id: payload.friend_request?.id,
+                        },
+                        actions: [
+                            { action: 'accept', title: 'Accept' },
+                            { action: 'view', title: 'View Profile' },
+                            { action: 'dismiss', title: 'Dismiss' }
+                        ],
+                        actionUrls: {
+                            accept: `/api/friend-requests/${payload.friend_request?.id}/accept`,
+                            view: `/UserProfile?userId=${encodeURIComponent(payload.from_user_id)}`,
+                        }
+                    });
+                }
+            } catch (pushError) {
+                console.warn('[push] Failed to send friend request push:', pushError);
+            }
         });
 
-        socket.on('room_invite_notification', (payload) => {
+        socket.on('room_invite_notification', async (payload) => {
             if (!payload || !payload.to_user_id) return;
             const roomName = `user:${payload.to_user_id}`;
+            
+            // Send socket notification
             io.to(roomName).emit('room_invite_notification', payload);
+            
+            // Send push notification
+            try {
+                const socketsInRoom = await io.in(roomName).fetchSockets();
+                const isUserOnline = socketsInRoom && socketsInRoom.length > 0;
+                
+                if (!isUserOnline || payload.forcePush) {
+                    const roomUrl = payload.room_id ? `/JoinRoom?roomId=${encodeURIComponent(payload.room_id)}` : '/BrowseRooms';
+                    await sendPushToUser(payload.to_user_id, {
+                        title: payload.notification?.title || 'Room Invitation',
+                        body: payload.notification?.message || payload.message || `You've been invited to join a room`,
+                        url: roomUrl,
+                        icon: '/logo.png',
+                        badge: '/logo.png',
+                        tag: `room_invite-${payload.room_id || Date.now()}`,
+                        priority: 'high',
+                        data: {
+                            type: 'room_invite',
+                            room_id: payload.room_id,
+                            room_name: payload.room_name,
+                            from_user_id: payload.from_user_id,
+                            from_user_name: payload.from_user_name,
+                            to_user_id: payload.to_user_id,
+                            notification_id: payload.notification?.id,
+                        },
+                        actions: [
+                            { action: 'join', title: 'Join Room' },
+                            { action: 'view', title: 'View Rooms' },
+                            { action: 'dismiss', title: 'Dismiss' }
+                        ],
+                        actionUrls: {
+                            join: roomUrl,
+                            view: '/BrowseRooms',
+                        }
+                    });
+                }
+            } catch (pushError) {
+                console.warn('[push] Failed to send room invite push:', pushError);
+            }
         });
 
         socket.on('send_message', async (data, ack) => {
@@ -647,10 +729,116 @@ const start = async () => {
                 // Send to everyone else in the room
                 socket.to(room).emit('receive_message', payload);
 
-                // For global UI unread badges
+                // For global UI unread badges and push notifications
                 if (to_user_id) {
                     const userRoom = `user:${to_user_id}`;
+                    
+                    // Check if user is online
+                    let isUserOnline = false;
+                    let isUserInChatRoom = false;
+                    try {
+                        const socketsInRoom = await io.in(userRoom).fetchSockets();
+                        isUserOnline = socketsInRoom && socketsInRoom.length > 0;
+                        
+                        // Check if user is in the chat room (actively viewing the chat)
+                        const chatRoomSockets = await io.in(room).fetchSockets();
+                        isUserInChatRoom = chatRoomSockets && chatRoomSockets.some(s => {
+                            // Socket might have user info in handshake or we track it differently
+                            return true; // Simplified - user is in room if room exists
+                        });
+                    } catch (checkError) {
+                        console.warn('[push] Error checking user status:', checkError);
+                    }
+                    
+                    // Always emit socket notification for real-time updates
                     io.to(userRoom).emit('chat_message_notification', payload);
+
+                    // Send push notification if:
+                    // 1. User is not online, OR
+                    // 2. User is online but not actively viewing this chat room (browser might be in background/tab)
+                    // We'll send push notification in both cases for better reliability
+                    if (!isUserOnline || !isUserInChatRoom) {
+                        try {
+                            // Format message preview (truncate if too long)
+                            let messagePreview = String(message).trim();
+                            if (messagePreview.length > 120) {
+                                messagePreview = messagePreview.substring(0, 120) + '...';
+                            }
+                            
+                            // Clean up HTML tags if present
+                            messagePreview = messagePreview.replace(/<[^>]*>/g, '').trim();
+                            if (!messagePreview) messagePreview = 'You have a new message';
+                            
+                            // Format title with sender name (like screenshot: "New booking: Cricket")
+                            const senderName = from_user_name || from_user_id.split('@')[0] || 'Someone';
+                            const notificationTitle = `${senderName}`; // Simple title showing sender name
+                            
+                            // Try to get sender's avatar for notification icon
+                            let senderAvatar = null;
+                            try {
+                                const senderProfile = await UserProfile.findOne({ user_id: from_user_id }).lean();
+                                if (senderProfile && senderProfile.avatar) {
+                                    senderAvatar = senderProfile.avatar;
+                                }
+                            } catch (avatarError) {
+                                // Ignore avatar fetch errors - continue without avatar
+                            }
+                            
+                            // If no profile avatar, try User model
+                            if (!senderAvatar) {
+                                try {
+                                    const sender = await User.findOne({ email: from_user_id }).lean();
+                                    if (sender && sender.avatar) {
+                                        senderAvatar = sender.avatar;
+                                    }
+                                } catch (userError) {
+                                    // Ignore user fetch errors - continue without avatar
+                                }
+                            }
+                            
+                            // Create proper chat URL
+                            const chatUrl = `/Chat?friendId=${encodeURIComponent(from_user_id)}`;
+                            
+                            // Send push notification with proper formatting (matching screenshot style)
+                            const pushResult = await sendPushToUser(to_user_id, {
+                                title: notificationTitle,
+                                body: messagePreview,
+                                url: chatUrl,
+                                icon: senderAvatar || '/logo.png', // Use sender's avatar if available
+                                badge: '/logo.png',
+                                // Can add a default chat image if desired
+                                image: undefined, // Optional: Add a default chat/conversation image
+                                tag: `chat-${from_user_id}`, // Use consistent tag to replace old notifications from same sender
+                                priority: 'high',
+                                requireInteraction: false, // Chat messages shouldn't require interaction
+                                actions: [
+                                    { action: 'open', title: 'Open Chat' }, // Changed from "View Message" to "Open Chat"
+                                    { action: 'dismiss', title: 'Dismiss' }
+                                ],
+                                actionUrls: {
+                                    open: chatUrl,
+                                },
+                                data: {
+                                    type: 'chat_message',
+                                    from_user_id,
+                                    from_user_name: from_user_name || from_user_id,
+                                    to_user_id,
+                                    message_id: doc.id || doc._id?.toString(),
+                                    message: messagePreview,
+                                    room,
+                                    timestamp: String(Date.now()),
+                                }
+                            });
+                            
+                            if (pushResult && pushResult.success) {
+                                console.log(`[push] Chat notification sent to ${to_user_id}: ${pushResult.sent} delivered`);
+                            } else {
+                                console.warn(`[push] Chat notification failed for ${to_user_id}:`, pushResult?.reason || 'unknown');
+                            }
+                        } catch (pushError) {
+                            console.error('[push] Failed to send chat message push notification:', pushError);
+                        }
+                    }
                 }
 
                 if (typeof ack === 'function') ack({ ok: true, message: payload });

@@ -1,17 +1,18 @@
-import React, { useEffect, useState } from 'react';
 import { api } from '@/api/apiClient';
+import { useEffect, useState } from 'react';
 
-import { Link } from 'react-router-dom';
-import { createPageUrl } from '../utils';
 import { motion } from 'framer-motion';
-import { Sparkles, TrendingUp, Award, Target, Users, MessageSquare, Mic, Swords, Bot } from 'lucide-react';
+import { Award, Bell, Bot, MessageSquare, Mic, Sparkles, Swords, TrendingUp, Users } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import TopNav from '../components/navigation/TopNav';
-import ClayCard from '../components/shared/ClayCard';
+import { createPageUrl } from '../utils';
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [recentSessions, setRecentSessions] = useState([]);
+  const [testingNotification, setTestingNotification] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -70,11 +71,44 @@ export default function Dashboard() {
         ...userExtemporeSessions.map(s => ({ ...s, type: 'extempore', date: s.created_date })),
         ...userGdRooms.map(s => ({ ...s, type: 'gd_room', date: s.started_at || s.created_date })),
         ...userAiInterviews.map(s => ({ ...s, type: 'interview', date: s.created_date }))
-      ].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
+      ].sort((a, b) => {
+        const dateA = new Date(a.date || 0).getTime();
+        const dateB = new Date(b.date || 0).getTime();
+        return dateB - dateA;
+      }).slice(0, 10);
 
       setRecentSessions(allSessions);
     } catch (error) {
       console.error('Error loading data:', error);
+    }
+  };
+
+  const testNotification = async () => {
+    if (testingNotification) return;
+    
+    setTestingNotification(true);
+    try {
+      // Test notification with format like the screenshot
+      const result = await api.push.test({
+        title: 'New message: SpeakUp',
+        body: `Test notification • ${new Date().toLocaleTimeString()} • ${new Date().toLocaleDateString()}`,
+        url: '/Dashboard',
+        actions: [
+          { action: 'open', title: 'Open Admin' },
+          { action: 'dismiss', title: 'Dismiss' }
+        ]
+      });
+      
+      if (result && result.success) {
+        toast.success(`Notification sent! ${result.result?.sent || 0} delivered`);
+      } else {
+        toast.error(result?.message || 'Failed to send notification. Please ensure notifications are enabled.');
+      }
+    } catch (error) {
+      console.error('Test notification error:', error);
+      toast.error('Failed to send test notification. Please check console for details.');
+    } finally {
+      setTestingNotification(false);
     }
   };
 
@@ -115,6 +149,16 @@ export default function Dashboard() {
                 <span className="text-base sm:text-lg">🔥</span>
                 <span className="font-bold text-gray-700 text-sm sm:text-base">{profile?.current_streak || 0} Day Streak</span>
               </div>
+              <button
+                onClick={testNotification}
+                disabled={testingNotification}
+                className="px-4 sm:px-6 py-2 sm:py-3 rounded-full bg-gradient-to-r from-blue-50 to-purple-50 shadow-md border-2 border-blue-200 hover:border-blue-300 hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Bell className="w-4 h-4 text-blue-600" />
+                <span className="font-bold text-gray-700 text-sm sm:text-base">
+                  {testingNotification ? 'Sending...' : 'Test Notification'}
+                </span>
+              </button>
             </div>
           </div>
         </motion.div>

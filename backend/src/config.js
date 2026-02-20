@@ -1,5 +1,8 @@
 const dotenv = require('dotenv');
+const path = require('path');
 dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../frontend/.env') });
 const getOrigins = () => (process.env.CORS_ORIGIN || 'http://localhost:5173,http://127.0.0.1:5173').split(',').map(s => s.trim()).filter(Boolean);
 module.exports = {
     port: process.env.PORT || 5000,

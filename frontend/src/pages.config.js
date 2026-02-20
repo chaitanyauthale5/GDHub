@@ -24,6 +24,7 @@ import GDArena from './pages/GDArena';
 import GDModes from './pages/GDModes';
 import GDPrepare from './pages/GDPrepare';
 import GDRoom from './pages/GDRoom';
+import GDTopics from './pages/GDTopics';
 import HumanInterviewRoom from './pages/HumanInterviewRoom';
 import JoinDebateRoom from './pages/JoinDebateRoom';
 import JoinRoom from './pages/JoinRoom';
@@ -66,6 +67,7 @@ export const PAGES = {
     "SoloAnalysis": SoloAnalysis,
     "ExtemporeAnalysis": ExtemporeAnalysis,
     "GDPrepare": GDPrepare,
+    "GDTopics": GDTopics,
     "TournamentHub": TournamentHub,
     "CreateTournament": CreateTournament,
     "TournamentLobby": TournamentLobby,

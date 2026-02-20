@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import { motion } from 'framer-motion';
-import { MessageSquare, Mic, Bot, UserCheck, Target } from 'lucide-react';
+import { MessageSquare, Mic, Bot, UserCheck, Target, BookOpen } from 'lucide-react';
 import TopNav from '../components/navigation/TopNav';
 import ClayCard from '../components/shared/ClayCard';
 
@@ -52,6 +52,15 @@ export default function Explore() {
       icon: Target,
       gradient: 'from-violet-500 to-purple-500',
       link: null
+    },
+    {
+      id: 'articles',
+      title: 'Articles',
+      subtitle: 'Communication Skills',
+      description: 'Read communication-related articles to improve your speaking and presentation skills',
+      icon: BookOpen,
+      gradient: 'from-emerald-400 to-teal-500',
+      link: 'GDTopics'
     }
   ];
 
@@ -69,7 +78,7 @@ export default function Explore() {
           <p className="text-gray-600 text-lg">Choose your path to excellence</p>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6">
           {practiceModesData.map((mode, index) => {
             const Icon = mode.icon;
             const CardContent = (
