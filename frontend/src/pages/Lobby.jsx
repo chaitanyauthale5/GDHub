@@ -237,14 +237,10 @@ export default function Lobby() {
               </p>
               <button
                 onClick={() => {
-                  const shareText = `Join my GD practice room!\nRoom Code: ${room?.room_code}\nJoin here: ${window.location.origin}${createPageUrl('JoinRoom')}`;
-                  if (navigator.share) {
-                    navigator.share({ title: 'GDHub Room Invite', text: shareText });
-                  } else {
-                    navigator.clipboard.writeText(shareText);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  }
+                  const inviteUrl = `${window.location.origin}${createPageUrl('JoinRoom', { roomId: room?.id })}`;
+                  navigator.clipboard.writeText(inviteUrl);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
                 }}
                 className="w-full py-3 rounded-xl bg-gradient-to-r from-green-400 to-cyan-500 text-white font-bold flex items-center justify-center gap-2 hover:shadow-lg transition-all mb-3"
               >

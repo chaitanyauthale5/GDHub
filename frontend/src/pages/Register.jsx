@@ -13,6 +13,10 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [gLoading, setGLoading] = useState(false);
 
+  const urlParams = new URLSearchParams(window.location.search);
+  const redirectParam = urlParams.get('redirect');
+  const redirect = (redirectParam && redirectParam.startsWith('/')) ? redirectParam : '/';
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -24,7 +28,7 @@ export default function Register() {
       if (!emailOk) throw new Error('Please enter a valid email');
       if (!password || password.length < 8) throw new Error('Password must be at least 8 characters');
       await api.auth.register({ email, password, full_name: fullName });
-      window.location.href = '/';
+      window.location.href = redirect;
     } catch (err) {
       setError(err.message || 'Registration failed');
     } finally {
@@ -38,7 +42,7 @@ export default function Register() {
     try {
       const { idToken, user } = await signInWithGooglePopup();
       await api.auth.firebaseLogin({ idToken, full_name: user.displayName || fullName || undefined, avatar: user.photoURL || undefined });
-      window.location.href = '/';
+      window.location.href = redirect;
     } catch (err) {
       setError(err.message || 'Google sign-in failed');
     } finally {
@@ -140,7 +144,7 @@ export default function Register() {
           </form>
           <p className="mt-4 text-sm text-center text-slate-300">
             Already have an account?{' '}
-            <Link to="/Login" className="text-blue-400 hover:underline">Sign in</Link>
+            <Link to={redirectParam ? `/Login?redirect=${encodeURIComponent(redirectParam)}` : '/Login'} className="text-blue-400 hover:underline">Sign in</Link>
           </p>
         </div>
       </motion.div>

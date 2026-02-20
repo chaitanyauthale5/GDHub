@@ -144,14 +144,22 @@ app.post('/api/friend-requests/:id/accept', async (req, res) => {
     res.json({ success: true });
 });
 
-app.post('/api/gd-rooms/:id/join', async (req, res) => {
-    const { user_id, user_name } = req.body || {};
-    if (!user_id) return res.status(400).json({ message: 'Missing user_id' });
+app.post('/api/gd-rooms/:id/join', auth, async (req, res) => {
+    const { user_name } = req.body || {};
+    const user_id = (req.user && (req.user.email || req.user.id)) ? (req.user.email || req.user.id) : null;
+    if (!user_id) return res.status(401).json({ message: 'Unauthorized' });
     const room = await GDRoom.findById(req.params.id);
     if (!room) return res.status(404).json({ message: 'Not found' });
+    if (room.status === 'completed') return res.status(400).json({ message: 'Room has ended' });
+    if (room.locked) return res.status(403).json({ message: 'Room is locked' });
     const now = new Date();
-    const idx = (room.participants || []).findIndex(p => p.user_id === user_id);
+    const participants = (room.participants || []);
+    const idx = participants.findIndex(p => p.user_id === user_id);
     if (idx === -1) {
+        const teamSize = Number(room.team_size || 0) || 4;
+        if (participants.length >= teamSize) {
+            return res.status(409).json({ message: 'Room is full' });
+        }
         room.participants.push({ user_id, name: user_name, joined_at: now });
     } else {
         // Ensure joined_at is set when user re-joins

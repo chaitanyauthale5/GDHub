@@ -18,5 +18,11 @@ if (import.meta.hot) {
   });
 }
 
+if (import.meta.env && import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(() => {});
+  });
+}
+
 
 

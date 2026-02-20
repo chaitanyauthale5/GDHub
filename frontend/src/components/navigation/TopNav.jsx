@@ -1,18 +1,21 @@
 import { api } from '@/api/apiClient';
 import { useSocket } from '@/lib/SocketContext';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Bell, Check, LogOut, MessageCircle, User, UserPlus, X } from 'lucide-react';
+import { Bell, Check, LogOut, Menu, MessageCircle, User, UserPlus, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../../utils';
+import MobileSidebar from './MobileSidebar';
 import XPBadge from '../shared/XPBadge';
 const speakupLogo = new URL('../../assets/logo-removebg-preview.png', import.meta.url).href;
 
 export default function TopNav({ activePage = 'Dashboard', user = null }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [friendRequests, setFriendRequests] = useState([]);
@@ -30,6 +33,11 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
   useEffect(() => {
     loadNotifications();
   }, []);
+
+  useEffect(() => {
+    setShowMobileSidebar(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location?.pathname]);
 
   const upsertNotification = (notif) => {
     if (!notif) return;
@@ -257,6 +265,18 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
 
           {/* Logo */}
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setShowMobileSidebar(true);
+                setShowNotifications(false);
+                setShowChat(false);
+                setShowProfileMenu(false);
+              }}
+              className="p-2.5 rounded-full bg-gray-100 hover:bg-gray-200 transition-all md:hidden"
+              aria-label="Open menu"
+            >
+              <Menu className="w-5 h-5 text-gray-800" />
+            </button>
             <img
               src={speakupLogo}
               alt="SpeakUp Logo"
@@ -593,6 +613,7 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
             </div>
           ) : (
             <div className="flex items-center gap-2 sm:gap-3">
+
               <Link
                 to={createPageUrl('Login')}
                 className="px-4 py-2.5 rounded-full font-bold text-gray-700 hover:bg-gray-100"
@@ -609,6 +630,31 @@ export default function TopNav({ activePage = 'Dashboard', user = null }) {
           )}
         </div>
       </div>
+
+      <MobileSidebar
+        open={showMobileSidebar}
+        onClose={() => setShowMobileSidebar(false)}
+        activePage={activePage}
+        currentUser={currentUser}
+        myProfile={myProfile}
+        profile={user}
+        notifCount={(friendRequests?.length || 0) + (unreadCount || 0)}
+        chatCount={unreadChatCount || 0}
+        onLogout={() => {
+          api.auth.logout();
+          setShowProfileMenu(false);
+        }}
+        onOpenNotifications={() => {
+          setShowNotifications(true);
+          setShowChat(false);
+          setShowProfileMenu(false);
+        }}
+        onOpenChat={() => {
+          setShowChat(true);
+          setShowNotifications(false);
+          setShowProfileMenu(false);
+        }}
+      />
     </nav>
   );
 }
