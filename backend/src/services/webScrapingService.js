@@ -3,34 +3,163 @@ const cheerio = require('cheerio');
 
 class WebScrapingService {
   constructor() {
-    this.newsSources = [
-      {
-        name: 'The Hindu',
-        url: 'https://www.thehindu.com/news/national/',
-        selectors: ['.story-card .story-card-heading a', 'h3 a', '.title a', 'a[href*="/news/"]'],
-        category: 'National'
-      },
-      {
-        name: 'Times of India',
-        url: 'https://timesofindia.indiatimes.com/india',
-        selectors: ['.w_tle a', 'h3 a', '.title a', 'a[href*="/articleshow/"]'],
-        category: 'National'
-      },
-      {
-        name: 'NDTV',
-        url: 'https://www.ndtv.com/india',
-        selectors: ['.news_Itm a', 'h2 a', '.story-list a', 'a[href*="/news/"]'],
-        category: 'National'
-      }
-    ];
+    this.newsSources = {
+      'Politics': [
+        {
+          name: 'The Hindu Politics',
+          url: 'https://www.thehindu.com/elections/politics/',
+          selectors: ['.story-card .story-card-heading a', 'h3 a', '.title a', 'a[href*="/politics/"]'],
+          category: 'Politics'
+        },
+        {
+          name: 'Times of India Politics',
+          url: 'https://timesofindia.indiatimes.com/politics',
+          selectors: ['.w_tle a', 'h3 a', '.title a', 'a[href*="/politics"]'],
+          category: 'Politics'
+        },
+        {
+          name: 'NDTV Politics',
+          url: 'https://www.ndtv.com/politics',
+          selectors: ['.news_Itm a', 'h2 a', '.story-list a', 'a[href*="/politics"]'],
+          category: 'Politics'
+        }
+      ],
+      'Economy': [
+        {
+          name: 'Economic Times',
+          url: 'https://economictimes.indiatimes.com',
+          selectors: ['.c1 a', 'h3 a', '.title a', 'a[href*="/articleshow/"]'],
+          category: 'Economy'
+        },
+        {
+          name: 'The Hindu Business',
+          url: 'https://www.thehindubusinessline.com/',
+          selectors: ['.story-card .story-card-heading a', 'h3 a', '.title a'],
+          category: 'Economy'
+        },
+        {
+          name: 'Business Standard',
+          url: 'https://www.business-standard.com/',
+          selectors: ['.card-headline a', 'h3 a', '.story-list a'],
+          category: 'Economy'
+        }
+      ],
+      'Social Issues': [
+        {
+          name: 'The Hindu Social',
+          url: 'https://www.thehindu.com/society/',
+          selectors: ['.story-card .story-card-heading a', 'h3 a', '.title a', 'a[href*="/society/"]'],
+          category: 'Social Issues'
+        },
+        {
+          name: 'NDTV Social',
+          url: 'https://www.ndtv.com/india-news',
+          selectors: ['.news_Itm a', 'h2 a', '.story-list a'],
+          category: 'Social Issues'
+        }
+      ],
+      'Technology': [
+        {
+          name: 'TechCrunch',
+          url: 'https://techcrunch.com/',
+          selectors: ['h3 a', '.post-block__title__link', '.article-title a'],
+          category: 'Technology'
+        },
+        {
+          name: 'The Verge',
+          url: 'https://www.theverge.com/',
+          selectors: ['h2 a', '.c-entry-box--compact__title a', '.c-entry-title a'],
+          category: 'Technology'
+        },
+        {
+          name: 'Wired',
+          url: 'https://www.wired.com/',
+          selectors: ['h2 a', '.summary-list__item a', '.card-component__title a'],
+          category: 'Technology'
+        }
+      ],
+      'Environment': [
+        {
+          name: 'The Hindu Environment',
+          url: 'https://www.thehindu.com/sci-tech/environment/',
+          selectors: ['.story-card .story-card-heading a', 'h3 a', '.title a', 'a[href*="/environment/"]'],
+          category: 'Environment'
+        },
+        {
+          name: 'Down to Earth',
+          url: 'https://www.downtoearth.org.in/',
+          selectors: ['h3 a', '.story-list a', '.article-title a'],
+          category: 'Environment'
+        }
+      ],
+      'Education': [
+        {
+          name: 'The Hindu Education',
+          url: 'https://www.thehindu.com/education/',
+          selectors: ['.story-card .story-card-heading a', 'h3 a', '.title a', 'a[href*="/education/"]'],
+          category: 'Education'
+        },
+        {
+          name: 'NDTV Education',
+          url: 'https://www.ndtv.com/education',
+          selectors: ['.news_Itm a', 'h2 a', '.story-list a'],
+          category: 'Education'
+        }
+      ],
+      'International': [
+        {
+          name: 'BBC World',
+          url: 'https://www.bbc.com/news/world',
+          selectors: ['h3 a', '.gs-c-promo-heading a', '.media-list__item a'],
+          category: 'International'
+        },
+        {
+          name: 'CNN International',
+          url: 'https://edition.cnn.com/world',
+          selectors: ['h3 a', '.container__headline a', '.card-headline a'],
+          category: 'International'
+        },
+        {
+          name: 'Al Jazeera',
+          url: 'https://www.aljazeera.com/',
+          selectors: ['h3 a', '.article-card__title a', '.top-sec-item a'],
+          category: 'International'
+        }
+      ],
+      'General': [
+        {
+          name: 'The Hindu',
+          url: 'https://www.thehindu.com/news/national/',
+          selectors: ['.story-card .story-card-heading a', 'h3 a', '.title a', 'a[href*="/news/"]'],
+          category: 'General'
+        },
+        {
+          name: 'Times of India',
+          url: 'https://timesofindia.indiatimes.com/india',
+          selectors: ['.w_tle a', 'h3 a', '.title a', 'a[href*="/articleshow/"]'],
+          category: 'General'
+        },
+        {
+          name: 'NDTV',
+          url: 'https://www.ndtv.com/india',
+          selectors: ['.news_Itm a', 'h2 a', '.story-list a', 'a[href*="/news/"]'],
+          category: 'General'
+        }
+      ]
+    };
   }
 
-  async scrapeNewsHeadlines() {
+  async scrapeNewsHeadlines(category = null) {
     const headlines = [];
     
-    console.log('Starting to scrape news headlines...');
+    console.log(`Starting to scrape news headlines${category ? ` for category: ${category}` : ''}...`);
     
-    for (const source of this.newsSources) {
+    // Get sources for specific category or all categories
+    const sourcesToScrape = category 
+      ? (this.newsSources[category] || [])
+      : Object.values(this.newsSources).flat();
+    
+    for (const source of sourcesToScrape) {
       try {
         console.log(`Scraping ${source.name} from ${source.url}...`);
         const response = await axios.get(source.url, {
@@ -51,11 +180,21 @@ class WebScrapingService {
           $(selector).each((index, element) => {
             const title = $(element).text().trim();
             if (title && title.length > 10 && sourceHeadlines.length < 5) {
+              let url = $(element).attr('href') || '';
+              // Convert relative URLs to absolute
+              if (url && !url.startsWith('http')) {
+                try {
+                  url = new URL(url, source.url).href;
+                } catch (e) {
+                  url = '';
+                }
+              }
+              
               sourceHeadlines.push({
                 title,
                 source: source.name,
                 category: source.category,
-                url: $(element).attr('href') || ''
+                url
               });
             }
           });
@@ -71,10 +210,19 @@ class WebScrapingService {
           console.log('Trying generic approach...');
           $('a').each((index, element) => {
             const title = $(element).text().trim();
-            const href = $(element).attr('href') || '';
+            let href = $(element).attr('href') || '';
             if (title && title.length > 15 && title.length < 200 && 
                 (href.includes('news') || href.includes('article') || href.includes('story')) &&
                 sourceHeadlines.length < 3) {
+              // Convert relative URLs to absolute
+              if (href && !href.startsWith('http')) {
+                try {
+                  href = new URL(href, source.url).href;
+                } catch (e) {
+                  href = '';
+                }
+              }
+              
               sourceHeadlines.push({
                 title,
                 source: source.name,
@@ -96,31 +244,54 @@ class WebScrapingService {
     return headlines;
   }
 
-  generateGDTopics(headlines) {
+  async getGDTopics(category = null) {
+    try {
+      const headlines = await this.scrapeNewsHeadlines(category);
+      const gdTopics = this.generateGDTopics(headlines, category);
+      
+      return {
+        success: true,
+        topics: gdTopics,
+        category: category || 'All',
+        headlinesCount: headlines.length,
+        generatedAt: new Date()
+      };
+    } catch (error) {
+      console.error('Error generating GD topics:', error);
+      return {
+        success: false,
+        error: error.message,
+        topics: [],
+        category: category || 'All'
+      };
+    }
+  }
+
+  generateGDTopics(headlines, category = null) {
     const gdTopics = [];
-    const categories = ['Politics', 'Economy', 'Social Issues', 'Technology', 'Environment', 'Education'];
+    const categories = category ? [category] : ['Politics', 'Economy', 'Social Issues', 'Technology', 'Environment', 'Education', 'International', 'General'];
     
     headlines.forEach(headline => {
-      const topic = this.convertToGDTopic(headline);
+      const topic = this.convertToGDTopic(headline, category);
       if (topic) {
         gdTopics.push(topic);
       }
     });
     
-    categories.forEach(category => {
+    categories.forEach(cat => {
       const categoryTopics = headlines
-        .filter(h => h.category === category || this.matchesCategory(h.title, category))
+        .filter(h => h.category === cat || this.matchesCategory(h.title, cat))
         .slice(0, 2);
       
       categoryTopics.forEach(headline => {
-        const topic = this.convertToGDTopic(headline, category);
+        const topic = this.convertToGDTopic(headline, cat);
         if (topic && !gdTopics.find(t => t.title === topic.title)) {
           gdTopics.push(topic);
         }
       });
     });
     
-    return gdTopics.slice(0, 10);
+    return gdTopics.slice(0, category ? 8 : 12); // More topics for specific categories
   }
 
   convertToGDTopic(headline, category = null) {
@@ -311,6 +482,10 @@ class WebScrapingService {
         topics: []
       };
     }
+  }
+
+  async getGDTopicsByCategory(category) {
+    return this.getGDTopics(category);
   }
 }
 

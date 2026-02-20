@@ -362,10 +362,14 @@ const gdTopics = {
   async getCategories() {
     return get('/api/gd-topics/categories');
   },
-  async getHeadlines() {
-    return get('/api/gd-topics/headlines');
+  async getHeadlines(category = null) {
+    const params = category ? `?category=${encodeURIComponent(category)}` : '';
+    return get(`/api/gd-topics/headlines${params}`);
   },
-  async generateTopics() {
+  async generateTopics(category = null) {
+    if (category) {
+      return get(`/api/gd-topics/generate-topics/${encodeURIComponent(category)}`);
+    }
     return get('/api/gd-topics/generate-topics');
   },
   async getCommunicationArticles() {
